@@ -14,7 +14,8 @@ from ui_tabs import (
     render_tab_desempeno, render_tab_tracker, render_tab_pronosticos, 
     render_tab_forense, render_tab_waivers, render_tab_nflverse, 
     render_tab_heatmap, render_tab_oraculo, render_tab_trade_machine, 
-    render_tab_lesiones, render_tab_vegas_odds, render_tab_mastermind
+    render_tab_lesiones, render_tab_vegas_odds, render_tab_mastermind,
+    render_tab_noticias # <-- AÑADIDO
 )
 
 st.title("⚡ WAR ROOM: Rayos de Jalisco")
@@ -33,13 +34,14 @@ if datos:
     riv_start = next((r.get('starters', []) for r in datos["rosters"] if r.get('roster_id') == riv_r_id), [])
     
     if mi_roster:
-        # LAS 15 PESTAÑAS MAESTRAS
+        # LAS 16 PESTAÑAS MAESTRAS
         tabs = st.tabs([
             "⚔️ Resumen Live", "⚖️ Side-by-Side", "📋 Mi Roster", 
             "📈 Histórico", "📊 Tracker Liga", "🔮 Predicciones", 
             "🕵‍♂️ Sabotaje", "🦅 Waivers", "🏈 NFLVerse", 
             "🗺️ Heatmap", "🧠 Oráculo ROS", "🤝 Trade Machine", 
-            "🚑 Lesiones", "🎲 Vegas Odds", "🤖 Gemini Mastermind"
+            "🚑 Lesiones", "🎲 Vegas Odds", "🤖 Mastermind", 
+            "📰 Noticias Liga" # <-- AÑADIDO
         ])
 
         # INYECCIÓN MODULAR ORDENADA
@@ -58,5 +60,6 @@ if datos:
         with tabs[12]: render_tab_lesiones(datos)
         with tabs[13]: render_tab_vegas_odds(datos)
         with tabs[14]: render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map)
+        with tabs[15]: render_tab_noticias(datos) # <-- AÑADIDO
 else:
     st.error("Error conectando a la API de Sleeper. Revisa la conexión.")
