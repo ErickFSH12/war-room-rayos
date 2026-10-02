@@ -500,19 +500,24 @@ def render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map):
     st.write("Transparencia algorítmica y síntesis predictiva de IA para dominar el mercado.")
 
     with st.expander("📊 Ver Matemáticas y Modelos Activos bajo el capó", expanded=False):
-        c_m1, c_m2, c_m3 = st.columns(3)
+        c_m1, c_m2 = st.columns(2)
+        c_m3, c_m4 = st.columns(2)
         with c_m1:
             st.markdown("### 1. Valor Esperado ($EV_{adj}$)")
             st.latex(r"EV_{adj} = \mu \times P(E) - \delta_{clima}")
-            st.caption("Ajusta la proyección de Sleeper ($\mu$) por el factor de éxito del Head Coach y castiga condiciones climáticas adversas.")
+            st.caption("Ajusta la proyección de Sleeper ($\mu$) por el factor de éxito del Head Coach y castiga el clima.")
         with c_m2:
             st.markdown("### 2. Varianza de Jugador ($\sigma$)")
             st.latex(r"\sigma = (100 - P_{E}) \times 0.08 + 3.0")
-            st.caption("Los jugadores en ofensivas poco confiables o con estatus 'Questionable' reciben una campana de Gauss más ancha (mayor riesgo).")
+            st.caption("Aumenta la dispersión de puntos posibles basado en ineficiencias de la ofensiva y estatus médico.")
         with c_m3:
             st.markdown("### 3. Simulación Monte Carlo")
             st.latex(r"P(Win) = \frac{\sum_{i=1}^{5000} [S_M > S_R]}{5000}")
-            st.caption("Se simulan 5,000 partidos iterando las curvas normales. Los puntos reales ya jugados asumen $\sigma = 0$ (varianza nula).")
+            st.caption("Simula 5,000 partidos iterando las curvas normales. Aplica varianza = 0 para puntos reales ya jugados.")
+        with c_m4:
+            st.markdown("### 4. Inferencia Bayesiana (Noticias)")
+            st.latex(r"P(\mu|News) = \frac{P(News|\mu)P(\mu)}{P(News)}")
+            st.caption("Actualiza la expectativa base integrando evidencia en tiempo real (RSS de ESPN/Yahoo) para alertar colapsos de proyección antes de que Sleeper los refleje.")
 
     st.divider()
     st.subheader("🤖 Análisis Estratégico y Anticipación de Movimientos")
@@ -521,26 +526,36 @@ def render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map):
     df_ros = simular_oraculo_ros(datos['rosters'], datos['players_db'], datos['proy'], u_map)
     df_heat = generar_heatmap_vulnerabilidad(datos['rosters'], datos['players_db'], datos['proy'], u_map)
     
-    # LA CONEXIÓN: Extraemos la misma lista unificada que usa la pestaña de Waivers
     df_nfl = cargar_nflverse()
     fas_unificados = obtener_mejores_waivers(datos['rosters'], datos['players_db'], datos['proy'], df_nfl)
 
-    contexto_liga = empaquetar_estado_liga_para_gemini(mi_roster, riv_start, riv_nom, prob_win, df_ros, df_heat, fas_unificados)
+    # NUEVO: Interceptamos nombres y noticias en background
+    nombres_roster = []
+    for r in datos['rosters']:
+        for pid in r.get('players', []):
+            p = datos['players_db'].get(str(pid), {})
+            if p.get('position') in ['QB', 'RB', 'WR', 'TE']:
+                nom = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
+                if nom: nombres_roster.append(nom.lower())
+                
+    with st.spinner("Compilando telemetría, cruzando con Inferencia Bayesiana de noticias..."):
+        noticias = obtener_noticias_nfl(nombres_roster)
+        contexto_liga = empaquetar_estado_liga_para_gemini(mi_roster, riv_start, riv_nom, prob_win, df_ros, df_heat, fas_unificados, noticias)
 
     prompt = f"""
-    Eres el analista de datos jefe (Data Scientist) de mi equipo de Fantasy Football.
-    Aquí tienes el resumen estadístico de la liga cruzando Monte Carlo, modelos ROS y Agencia Libre:
+    Eres el analista de datos jefe de mi equipo de Fantasy Football.
+    Aquí tienes el resumen de la liga cruzando Monte Carlo, ROS, Agencia Libre y VECTORES BAYESIANOS DE NOTICIAS:
     {contexto_liga}
     
-    Necesito que redactes un 'Executive Summary' dividido estrictamente en estas 3 secciones (usa viñetas precisas, sin introducciones largas):
+    Redacta un 'Executive Summary' dividido en estas 3 secciones (usa viñetas precisas):
     
-    1. DIAGNÓSTICO ESTADÍSTICO: ¿Cómo estamos realmente en probabilidad de esta semana y a futuro?
-    2. ANTICIPACIÓN DE MERCADO: ¿Qué movimientos desesperados van a hacer los demás mánagers basándote en la vulnerabilidad actual de la liga?
-    3. PLAN DE ACCIÓN RECOMENDADO: Dime exactamente 2 movimientos que debo hacer (a quién atacar por trade o quién agarrar de FA) para aprovechar las matemáticas a mi favor.
+    1. DIAGNÓSTICO MATEMÁTICO: ¿Cómo estamos en probabilidad esta semana y a futuro?
+    2. SHOCK DEL MERCADO (BAYES): ¿Cómo afectan las 'Alertas' de noticias a los mánagers de la liga? ¿Quién está desesperado hoy mismo?
+    3. PLAN DE ACCIÓN: Dime 2 movimientos agresivos que debo hacer para aprovechar este caos (a quién atacar por trade o quién agarrar de la lista exacta de FA).
     """
 
-    if st.button("🧠 Procesar Telemetría y Generar Plan Maestro (Gemini API)"):
-        with st.spinner("Conectando con la IA... analizando vectores de probabilidad y aislando Agentes Libres..."):
+    if st.button("🧠 Generar Plan Maestro Predictivo (Gemini + Bayes)"):
+        with st.spinner("Gemini analizando la matriz estadística y el impacto de las noticias..."):
             resolucion = llamar_gemini(prompt)
             st.info(resolucion)
 def render_tab_noticias(datos, u_map):
