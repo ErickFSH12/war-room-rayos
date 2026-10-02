@@ -9,11 +9,13 @@ sns.set_theme(style="whitegrid", palette="pastel")
 
 # --- IMPORTAR MÓDULOS DE ARQUITECTURA ---
 from core_logic import extraer_datos_sleeper, SLEEPER_USERNAME, MI_EQUIPO_NOMBRE
-from ui_tabs import (render_tab_live, render_tab_roster, render_tab_tracker, 
-                     render_tab_pronosticos, render_tab_forense, 
-                     render_tab_waivers, render_tab_nflverse, render_tab_desempeno,
-                     render_tab_side_by_side, render_tab_heatmap, render_tab_oraculo,
-                     render_tab_trade_machine, render_tab_lesiones, render_tab_vegas_odds)
+from ui_tabs import (
+    render_tab_live, render_tab_side_by_side, render_tab_roster, 
+    render_tab_desempeno, render_tab_tracker, render_tab_pronosticos, 
+    render_tab_forense, render_tab_waivers, render_tab_nflverse, 
+    render_tab_heatmap, render_tab_oraculo, render_tab_trade_machine, 
+    render_tab_lesiones, render_tab_vegas_odds, render_tab_mastermind
+)
 
 st.title("⚡ WAR ROOM: Rayos de Jalisco")
 
@@ -31,13 +33,13 @@ if datos:
     riv_start = next((r.get('starters', []) for r in datos["rosters"] if r.get('roster_id') == riv_r_id), [])
     
     if mi_roster:
-        # LAS 14 PESTAÑAS MAESTRAS
+        # LAS 15 PESTAÑAS MAESTRAS
         tabs = st.tabs([
-            "⚔️ Resumen Live", "⚖️ Side-by-Side Live", "📋 Mi Roster & Táctica", 
-            "📈 Desempeño Histórico", "📊 Tracker Liga", "🔮 Predicciones", 
-            "🕵‍♂️ Sabotaje", "🦅 Waivers", "🏈 Data NFLVerse", 
-            "🗺️ Heatmap Vulnerabilidad", "🧠 Oráculo ROS", "🤝 Máquina de Trades", 
-            "🚑 Alerta Lesiones", "🎲 Vegas Odds & Scripts"
+            "⚔️ Resumen Live", "⚖️ Side-by-Side", "📋 Mi Roster", 
+            "📈 Histórico", "📊 Tracker Liga", "🔮 Predicciones", 
+            "🕵‍♂️ Sabotaje", "🦅 Waivers", "🏈 NFLVerse", 
+            "🗺️ Heatmap", "🧠 Oráculo ROS", "🤝 Trade Machine", 
+            "🚑 Lesiones", "🎲 Vegas Odds", "🤖 Gemini Mastermind"
         ])
 
         # INYECCIÓN MODULAR ORDENADA
@@ -55,23 +57,6 @@ if datos:
         with tabs[11]: render_tab_trade_machine(datos, mi_roster, u_map)
         with tabs[12]: render_tab_lesiones(datos)
         with tabs[13]: render_tab_vegas_odds(datos)
+        with tabs[14]: render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map)
 else:
     st.error("Error conectando a la API de Sleeper. Revisa la conexión.")
-
-# Modifica la importación en app.py para incluir la nueva pestaña
-from ui_tabs import (..., render_tab_mastermind)
-
-# [...]
-
-        # AÑADE LA PESTAÑA A LA LISTA
-        tabs = st.tabs([
-            "⚔️️ Resumen Live", "⚖️ Side-by-Side", "📋 Mi Roster", 
-            "📈 Histórico", "📊 Tracker Liga", "🔮 Predicciones", 
-            "🕵‍♂️ Sabotaje", "🦅 Waivers", "🏈 NFLVerse", 
-            "🗺️ Heatmap", "🧠 Oráculo ROS", "🤝 Trade Machine", 
-            "🚑 Lesiones", "🎲 Vegas Odds", "🤖 Gemini Mastermind" # <-- NUEVA
-        ])
-
-        # [...]
-        # AÑADE LA INYECCIÓN AL FINAL
-        with tabs[14]: render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map)
