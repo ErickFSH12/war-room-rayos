@@ -112,3 +112,54 @@ def formatear_roster_df(ids, players_db, proy, reales, etiqueta):
 def llamar_gemini(prompt):
     try: return client.models.generate_content(model='gemini-3.5-flash-lite', contents=prompt).text
     except: return "Conexión a ESPN interrumpida."
+# --- NUEVA TELEMETRÍA: CÁLCULO DE DRIFT Y EMPAREJAMIENTO SIDE-BY-SIDE ---
+def calcular_drift_probabilidad(m_ids, r_ids, players_db, proyecciones, reales, n_sims=3000):
+    # 1. Simulación Base (Sin datos reales, como estaba antes de iniciar la semana)
+    _, _, sm_base, sr_base = ejecutar_monte_carlo_dual(m_ids, r_ids, players_db, proyecciones, {}, n_sims)
+    prob_base = round((np.sum(sm_base > sr_base) / n_sims) * 100.0, 1) if r_ids else 100.0
+    
+    # 2. Simulación Live (Congelando datos reales)
+    _, _, sm_live, sr_live = ejecutar_monte_carlo_dual(m_ids, r_ids, players_db, proyecciones, reales, n_sims)
+    prob_live = round((np.sum(sm_live > sr_live) / n_sims) * 100.0, 1) if r_ids else 100.0
+    
+    delta = round(prob_live - prob_base, 1)
+    return prob_base, prob_live, delta
+
+def generar_comparativa_side_by_side(m_ids, r_ids, players_db, proy, reales):
+    filas = []
+    max_len = max(len(m_ids), len(r_ids))
+    for i in range(max_len):
+        # Mi jugador
+        if i < len(m_ids):
+            pid_m = str(m_ids[i])
+            pm = players_db.get(pid_m, {})
+            nom_m = f"{pm.get('first_name','')[:1]}. {pm.get('last_name','')}".strip()
+            pos_m = pm.get('position', 'FLEX')
+            pts_m = reales.get(pid_m, get_proy(pid_m, pos_m, proy))
+            st_m = "🔒 Final" if pid_m in reales else "⏳ Proy"
+        else:
+            nom_m, pos_m, pts_m, st_m = "-", "-", 0.0, "-"
+            
+        # Jugador rival
+        if i < len(r_ids):
+            pid_r = str(r_ids[i])
+            pr = players_db.get(pid_r, {})
+            nom_r = f"{pr.get('first_name','')[:1]}. {pr.get('last_name','')}".strip()
+            pos_r = pr.get('position', 'FLEX')
+            pts_r = reales.get(pid_r, get_proy(pid_r, pos_r, proy))
+            st_r = "🔒 Final" if pid_r in reales else "⏳ Proy"
+        else:
+            nom_r, pos_r, pts_r, st_r = "-", "-", 0.0, "-"
+
+        filas.append({
+            "Pos (Rayos)": pos_m,
+            "Rayos de Jalisco": nom_m,
+            "Pts (Rayos)": pts_m,
+            "Estado Rayos": st_m,
+            "VS": "⚔️",
+            "Estado Rival": st_r,
+            "Pts (Rival)": pts_r,
+            "Rival": nom_r,
+            "Pos (Rival)": pos_r
+        })
+    return pd.DataFrame(filas)
