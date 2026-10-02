@@ -186,3 +186,79 @@ def render_tab_nflverse():
     ax_bk.plot([5, 25], [5, 25], color=COLOR_RIV, ls='--')
     ax_bk.spines['top'].set_visible(False); ax_bk.spines['right'].set_visible(False)
     st.pyplot(fig_bk)
+def render_tab_desempeno(datos, mi_roster):
+    st.header("📈 Rendimiento de Jugadores (Sleeper + NFLVerse)")
+    st.write("Cruce telemétrico de proyecciones en vivo y el historial científico de yardas y touchdowns.")
+    
+    # 1. SLEEPER ACTUAL
+    st.subheader("1. Radiografía Semana Actual (Sleeper)")
+    datos_actuales = []
+    for pid in mi_roster['players']:
+        p = datos['players_db'].get(str(pid), {})
+        nom = f"{p.get('first_name','')} {p.get('last_name','')}".strip()
+        pos = p.get('position', 'N/A')
+        proy = datos['proy'].get(str(pid), 0.0)
+        real = datos['reales'].get(str(pid), 0.0)
+        status = "✅ Ya jugó" if str(pid) in datos['reales'] else "⏳ Pendiente"
+        datos_actuales.append({
+            "Jugador": nom, "Posición": pos, 
+            "Proyectado": proy, "Real": real, 
+            "Diferencia": round(real-proy, 1) if status == "✅ Ya jugó" else 0.0,
+            "Status": status
+        })
+    
+    df_act = pd.DataFrame(datos_actuales).sort_values("Proyectado", ascending=False)
+    
+    col_g1, col_g2 = st.columns([2, 1])
+    with col_g1:
+        fig_act = px.bar(df_act, x="Jugador", y=["Proyectado", "Real"], barmode="group", 
+                         color_discrete_sequence=[COLOR_MIO, COLOR_RIV], 
+                         title="Sleeper: Expectativa vs Realidad")
+        fig_act.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig_act, use_container_width=True)
+    with col_g2:
+        st.dataframe(df_act[["Jugador", "Proyectado", "Real", "Status"]], hide_index=True, use_container_width=True)
+
+    # 2. NFLVERSE HISTÓRICO
+    st.divider()
+    st.subheader("2. Historial Científico Multicategoría (NFLVerse)")
+    
+    df_nfl = cargar_nflverse()
+    
+    if not df_nfl.empty:
+        # Nombres de Los Rayos para filtrar
+        mis_jugadores = [f"{datos['players_db'].get(str(pid), {}).get('first_name', '')} {datos['players_db'].get(str(pid), {}).get('last_name', '')}".strip() for pid in mi_roster['players']]
+        
+        # Identificar la columna de nombre correcta en NFLVerse
+        col_name = 'player_display_name' if 'player_display_name' in df_nfl.columns else 'player_name'
+        df_mis = df_nfl[df_nfl[col_name].isin(mis_jugadores)].copy()
+        
+        if not df_mis.empty:
+            c1, c2 = st.columns(2)
+            with c1:
+                # Agrupación por temporadas (Yardas, TDs, Puntos)
+                df_temporada = df_mis.groupby([col_name, 'season'])[['fantasy_points_ppr', 'passing_yards', 'rushing_yards', 'receiving_yards']].sum().reset_index()
+                fig_hist = px.bar(df_temporada, x=col_name, y="fantasy_points_ppr", color="season", 
+                                  barmode="group", title="Producción Total por Temporada", 
+                                  color_continuous_scale="Blues")
+                fig_hist.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig_hist, use_container_width=True)
+
+            with c2:
+                # Línea de tendencia de la temporada más reciente
+                temp_reciente = df_mis['season'].max()
+                df_tendencia = df_mis[df_mis['season'] == temp_reciente]
+                fig_line = px.line(df_tendencia, x="week", y="fantasy_points_ppr", color=col_name, 
+                                   markers=True, title=f"Curva de Volatilidad Semanal ({temp_reciente})", 
+                                   color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig_line.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+                st.plotly_chart(fig_line, use_container_width=True)
+
+            st.markdown("**Desglose Absoluto Multicategoría**")
+            # Ajuste de columnas visibles
+            df_temporada.rename(columns={col_name: "Jugador", "season": "Temporada", "fantasy_points_ppr": "Pts PPR", "passing_yards": "Yds Pase", "rushing_yards": "Yds Acarreo", "receiving_yards": "Yds Recepción"}, inplace=True)
+            st.dataframe(df_temporada, hide_index=True, use_container_width=True)
+        else:
+            st.warning("⚠️ No se cruzaron datos exactos con NFLVerse. Esto puede pasar con jugadores novatos, defensas (DEF) o sufijos como 'Jr.' y 'III'.")
+    else:
+        st.error("No se pudo cargar la base de NFLVerse.")
