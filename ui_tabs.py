@@ -23,6 +23,17 @@ COLOR_RIV = "#E94B3C"
 
 def render_tab_live(datos, mi_roster, riv_start, riv_nom):
     st.header(f"Matchup Semana {datos['semana']}")
+    
+    # NUEVO: GUÍA TÁCTICA EXPANDIBLE
+    with st.expander("📚 Guía Táctica: Qué investigar antes de un Trade o Waiver", expanded=False):
+        st.markdown("""
+        * **🏈 Quarterbacks (QB):** Busca *Rushing Upside* (puntos por acarreo = piso seguro) y volumen de pases. Evalúa su línea ofensiva y el calendario futuro (SOS). 
+        * **🏃 Running Backs (RB):** El volumen es rey. Analiza los *High-Value Touches* (oportunidades en zona roja y targets por pase). Huye de los "comités" de 3 corredores.
+        * **👐 Wide Receivers (WR):** Investiga el *Target Share* (>20% de pases a él), *Air Yards* (pases profundos = jugadas grandes) y los emparejamientos contra esquineros estrella. 
+        * **🧱 Tight Ends (TE):** Posición altamente volátil. Prioriza TE's que sean la 1ª o 2ª opción de pase en su equipo o que sean gigantes físicos dominantes en la Zona Roja.
+        * **🛡️ DEF / 🦵 K:** Haz *Streaming* (rótalos cada semana). Ataca ofensivas débiles, equipos que ceden muchas capturas (Sacks) o QBs novatos. Busca equipos favoritos que jueguen en casa.
+        """)
+        
     m_aseg = sum([datos['reales'][str(p)] for p in mi_roster['starters'] if str(p) in datos['reales']])
     m_rest = sum([datos['proy'].get(str(p), 0.0) for p in mi_roster['starters'] if str(p) not in datos['reales']])
     r_aseg = sum([datos['reales'][str(p)] for p in riv_start if str(p) in datos['reales']])
