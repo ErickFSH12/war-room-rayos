@@ -14,8 +14,8 @@ st.set_page_config(page_title="War Room - Rayos de Jalisco", page_icon="⚡", la
 st_autorefresh(interval=60000, key="data_refresh")
 
 # Colores suaves para gráficas
-COLOR_MIO = "#4A90E2" # Azul suave
-COLOR_RIV = "#E94B3C" # Salmón/Rojo suave
+COLOR_MIO = "#4A90E2" 
+COLOR_RIV = "#E94B3C" 
 sns.set_theme(style="whitegrid", palette="pastel")
 
 # --- CONSTANTES ---
@@ -78,7 +78,8 @@ def cargar_nflverse():
     except: return pd.DataFrame()
 
 # --- MOTORES DE CÁLCULO ---
-def ejecutar_monte_carlo(m_ids, r_ids, players_db, proyecciones, reales, n_sims=5000):
+# ¡AQUÍ ESTABA EL ERROR! Función renombrada a ejecutar_monte_carlo_dual
+def ejecutar_monte_carlo_dual(m_ids, r_ids, players_db, proyecciones, reales, n_sims=5000):
     def simular(ids):
         sims = np.zeros(n_sims)
         for pid in ids:
@@ -189,7 +190,7 @@ if datos:
                 resumen_espn = llamar_gemini(f"Comentarista ESPN. Rayos vs {riv_nom}. Probabilidad {prob}%. Resume en 2 párrafos cortos.")
                 st.info(f"🎙️ {resumen_espn}")
 
-        # --- TAB 2: MI ROSTER & TÁCTICA (TABLAS RECUPERADAS) ---
+        # --- TAB 2: MI ROSTER & TÁCTICA ---
         with tabs[1]:
             st.header("Auditoría de Equipo")
             
@@ -233,6 +234,8 @@ if datos:
         # --- TAB 3: PUNTOS EN VIVO INTERACTIVOS ---
         with tabs[2]:
             st.header("Marcador Global de la Liga")
+            st.write("Mira exactamente quién está cargando a cada equipo en tiempo real.")
+            
             datos_barras = []
             for r in datos['rosters']:
                 mgr = u_map.get(r['owner_id'], 'Eq')
@@ -281,22 +284,28 @@ if datos:
                 for rid in t.get('roster_ids', []):
                     if rid in cnt: cnt[rid]['trades'] += 1
             
+            drops_p = []
             for w in datos['waivers']:
                 rid = w.get('creator') or (w.get('roster_ids',[None])[0] if w.get('roster_ids') else None)
                 if rid in cnt:
                     cnt[rid]['adds'] += 1; cnt[rid]['faab'] += w.get('settings',{}).get('waiver_bid',0)
-                    
+                for pid, rd in (w.get('drops') or {}).items():
+                    pr = get_proy(str(pid), datos['players_db'].get(str(pid),{}).get('position'), datos['proy'])
+                    if pr > 10.5: drops_p.append(f"{datos['players_db'].get(str(pid),{}).get('last_name')} (Drop de {u_map.get(next((r.get('owner_id') for r in datos['rosters'] if r.get('roster_id')==rd),'Eq'))})")
+
             c_f1, c_f2 = st.columns(2)
             with c_f1:
-                st.subheader("Actividad (Trades y FAAB)")
+                st.subheader("Gatillo Fácil (Trades/Waivers)")
                 rk = sorted(cnt.items(), key=lambda x: x[1]['adds'] + x[1]['trades'], reverse=True)
-                df_act = pd.DataFrame([{"Manager": u_map.get(next((r.get('owner_id') for r in datos['rosters'] if r.get('roster_id')==rid),'Eq')), "Trades": d['trades'], "Waivers": d['adds'], "FAAB Gastado": f"${d['faab']}"} for rid, d in rk[:5]])
-                st.dataframe(df_act, hide_index=True, use_container_width=True)
+                for rid, d in rk[:5]:
+                    st.write(f"- **{u_map.get(next((r.get('owner_id') for r in datos['rosters'] if r.get('roster_id')==rid),'Eq'))}**: {d['trades']} Trades | {d['adds']} Adds | ${d['faab']} FAAB")
             with c_f2:
-                st.subheader("Objetivos de Trade")
-                st.info("El escáner de sabotaje revisó la liga. Busca mánagers con alto FAAB gastado o desesperación por RBs para negociar.")
+                st.subheader("Panic Drops")
+                if drops_p:
+                    for d in drops_p[-5:]: st.error(d)
+                else: st.write("Sin Panic Drops recientes.")
 
-        # --- TAB 6: WAIVERS ---
+        # --- TAB 6: WAIVERS (Agencia Libre) ---
         with tabs[5]:
             st.header("Agencia Libre Inteligente (Top EV_adj)")
             ocu = set([str(pid) for r in datos['rosters'] for pid in r.get('players', [])])
