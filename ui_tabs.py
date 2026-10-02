@@ -362,3 +362,97 @@ def render_tab_side_by_side(datos, mi_roster, riv_start, riv_nom, mi_r_id, u_map
                 st.caption(f"Prob. Victoria: **{round(100.0 - p_live, 1)}%**")
 
             st.markdown("---")
+          # =====================================================================
+# RENDERIZADO DE LOS 5 MÓDULOS AVANZADOS
+# =====================================================================
+
+def render_tab_heatmap(datos, u_map):
+    st.header("🗺️ Heatmap Global de Vulnerabilidad")
+    st.write("Identifica las debilidades posicionales de toda la liga de un vistazo para atacar con trades.")
+    
+    df_heat = generar_heatmap_vulnerabilidad(datos['rosters'], datos['players_db'], datos['proy'], u_map)
+    
+    fig = px.imshow(
+        df_heat, text_auto=".1f", aspect="auto", 
+        color_continuous_scale="RdYlGn", origin='lower',
+        title="Fuerza del Roster por Posición (Proyección Acumulada)"
+    )
+    fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig, use_container_width=True)
+
+def render_tab_oraculo(datos, u_map):
+    st.header("🧠 El Oráculo: Rest of Season (ROS)")
+    st.write("Simulación de probabilidades de Campeonato basada en la profundidad y fuerza bruta de los rosters a futuro.")
+    
+    df_ros = simular_oraculo_ros(datos['rosters'], datos['players_db'], datos['proy'], u_map)
+    
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        st.dataframe(df_ros[['Manager', 'Prob Campeonato %']], hide_index=True, use_container_width=True)
+    with c2:
+        fig = px.bar(df_ros, x='Manager', y='Prob Campeonato %', color='Prob Campeonato %', color_continuous_scale="Blues")
+        fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig, use_container_width=True)
+
+def render_tab_trade_machine(datos, mi_roster, u_map):
+    st.header("🤝 La Máquina de Trades ('What If' Engine)")
+    st.write("Simula cómo un trade afectaría matemáticamente tus probabilidades de ganar esta semana.")
+    
+    # Preparar listas de selección
+    mis_jugadores_opciones = {f"{datos['players_db'].get(str(p), {}).get('last_name')} ({datos['players_db'].get(str(p), {}).get('position')})": p for p in mi_roster['players']}
+    
+    rivales_opciones = {}
+    for r in datos['rosters']:
+        if r['roster_id'] != mi_roster['roster_id']:
+            mgr_nom = u_map.get(r['owner_id'], 'Eq')
+            for p in r.get('players', []):
+                nom = f"{datos['players_db'].get(str(p), {}).get('last_name')} ({datos['players_db'].get(str(p), {}).get('position')}) - {mgr_nom}"
+                rivales_opciones[nom] = {'pid': p, 'rid': r['roster_id'], 'starters': r.get('starters', [])}
+
+    c1, c2 = st.columns(2)
+    with c1:
+        dar_seleccion = st.selectbox("Dar a (Tu jugador):", list(mis_jugadores_opciones.keys()))
+    with c2:
+        recibir_seleccion = st.selectbox("Recibir a (Jugador Rival):", list(rivales_opciones.keys()))
+
+    if st.button("⚖️ Simular Impacto del Trade"):
+        pid_dar = mis_jugadores_opciones[dar_seleccion]
+        pid_recibir = rivales_opciones[recibir_seleccion]['pid']
+        rival_starters = rivales_opciones[recibir_seleccion]['starters']
+        
+        pb, pp, delta = evaluar_trade(mi_roster['starters'], rival_starters, pid_dar, pid_recibir, datos['players_db'], datos['proy'], datos['reales'])
+        
+        st.divider()
+        st.subheader("Resultado de la Simulación")
+        c_res1, c_res2, c_res3 = st.columns(3)
+        c_res1.metric("Probabilidad Pre-Trade", f"{pb}%")
+        c_res2.metric("Probabilidad Post-Trade", f"{pp}%")
+        c_res3.metric("Impacto Neto (Δ)", f"{'+' if delta >= 0 else ''}{delta}%", delta=f"{delta}%", delta_color="normal")
+        
+        if delta > 0: st.success("Trade Favorable. Aceptarlo aumenta tus chances esta semana.")
+        else: st.error("Trade Tóxico. Matemáticamente pierdes ventaja en este enfrentamiento.")
+
+def render_tab_lesiones(datos):
+    st.header("🚑 Alertas de Lesión y Handcuffs")
+    st.write("Identifica titulares caídos en toda la liga y sus suplentes directos disponibles en Agencia Libre.")
+    
+    df_les = escanear_handcuffs(datos['rosters'], datos['players_db'])
+    if not df_les.empty:
+        st.dataframe(df_les, hide_index=True, use_container_width=True)
+    else:
+        st.success("No hay lesiones críticas recientes de RBs o WRs que ofrezcan Handcuffs valiosos.")
+
+def render_tab_vegas_odds(datos):
+    st.header("🎲 Game Script & Vegas Odds (Implícitos)")
+    st.write("Identifica qué equipos NFL están proyectados para tener partidos de alto puntaje (Shootouts) para alinear a tus FLEX.")
+    
+    df_vegas = generar_game_scripts(datos['players_db'], datos['proy'])
+    
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        st.dataframe(df_vegas.head(12), hide_index=True, use_container_width=True)
+    with c2:
+        fig = px.bar(df_vegas.head(12), x="Proy Ofensiva Total", y="Equipo NFL", orientation='h', 
+                     title="Top 12 Ofensivas de la Semana (Shootout Potential)", color="Proy Ofensiva Total", color_continuous_scale="YlOrRd")
+        fig.update_layout(yaxis={'categoryorder':'total ascending'}, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig, use_container_width=True)
