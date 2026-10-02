@@ -197,16 +197,28 @@ def simular_oraculo_ros(rosters, players_db, proy, u_map):
     df_ros['Prob Campeonato %'] = round((df_ros['Poder ROS'] / df_ros['Poder ROS'].sum()) * 100, 1)
     return df_ros
 
-def evaluar_trade(mi_roster_ids, rival_roster_ids, pid_dar, pid_recibir, players_db, proy, reales):
-    m_new = [p for p in mi_roster_ids if str(p) != str(pid_dar)] + [pid_recibir]
-    r_new = [p for p in rival_roster_ids if str(p) != str(pid_recibir)] + [pid_dar]
+def evaluar_trade_interactivo(jugador_dar, jugador_recibir, delta_math, contexto_fuentes, proy_dar, proy_recibir, noticias_jugadores):
+    prompt = f"""
+    Eres un experto analista de Fantasy Football (Nivel Conserje / Asesor Personal).
+    Estoy evaluando este trade exacto en mi liga:
+    - DOY A: {jugador_dar} (Proy actual: {proy_dar} pts)
+    - RECIBO A: {jugador_recibir} (Proy actual: {proy_recibir} pts)
     
-    # Probabilidad antes del trade
-    prob_base, _, _, _ = ejecutar_monte_carlo_dual(mi_roster_ids, rival_roster_ids, players_db, proy, reales, 1500)
-    # Probabilidad después del trade
-    prob_post, _, _, _ = ejecutar_monte_carlo_dual(m_new, r_new, players_db, proy, reales, 1500)
+    IMPACTO MATEMÁTICO (MONTE CARLO):
+    Si hago este trade, mis probabilidades de ganar el duelo de esta semana cambian en: {delta_math}%
     
-    return prob_base, prob_post, round(prob_post - prob_base, 1)
+    INTERCEPTACIÓN RSS (NOTICIAS EN VIVO):
+    {noticias_jugadores}
+    
+    FUENTES DE CONTEXTO ADICIONAL (ESTILO NOTEBOOK LM):
+    {contexto_fuentes if contexto_fuentes else "No se proveyeron fuentes externas."}
+    
+    Dame un análisis rápido, crudo y directo dividido en estas 3 secciones precisas:
+    1. 🔍 SCOUTING: ¿Cuál es el verdadero valor de mercado de ambos jugadores? ¿Estoy comprando bajo o vendiendo alto?
+    2. ⚖️ ANÁLISIS DEL TRADE: Analiza el cruce de las proyecciones, el impacto matemático estricto ({delta_math}%) y las noticias/fuentes. ¿Tiene sentido estratégico a largo plazo?
+    3. 🎯 VEREDICTO FINAL: Aceptar, Rechazar, o sugiere una Contraoferta exacta.
+    """
+    return llamar_gemini(prompt)
 
 def escanear_handcuffs(rosters, players_db):
     lesionados = []
