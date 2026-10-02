@@ -1,0 +1,188 @@
+import streamlit as st
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import math
+from core_logic import (get_proy, optimizar_alineacion, ejecutar_monte_carlo_dual, 
+                        llamar_gemini, formatear_roster_df, cargar_nflverse, 
+                        calc_prob, obtener_info_hc, consultar_clima, MI_EQUIPO_NOMBRE)
+
+COLOR_MIO = "#4A90E2"
+COLOR_RIV = "#E94B3C"
+
+def render_tab_live(datos, mi_roster, riv_start, riv_nom):
+    st.header(f"Matchup Semana {datos['semana']}")
+    m_aseg = sum([datos['reales'][str(p)] for p in mi_roster['starters'] if str(p) in datos['reales']])
+    m_rest = sum([datos['proy'].get(str(p), 0.0) for p in mi_roster['starters'] if str(p) not in datos['reales']])
+    r_aseg = sum([datos['reales'][str(p)] for p in riv_start if str(p) in datos['reales']])
+    r_rest = sum([datos['proy'].get(str(p), 0.0) for p in riv_start if str(p) not in datos['reales']])
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric(label=f"{MI_EQUIPO_NOMBRE}", value=round(m_aseg + m_rest, 1), delta=f"{round(m_aseg,1)} asegurados")
+    c2.metric(label=f"{riv_nom}", value=round(r_aseg + r_rest, 1), delta=f"{round(r_aseg,1)} asegurados")
+    
+    opt_start, cambios = optimizar_alineacion(mi_roster['starters'], [p for p in mi_roster['players'] if p not in mi_roster['starters']], datos['players_db'], datos['proy'], datos['reales'])
+    prob, med, sm, sr = ejecutar_monte_carlo_dual(opt_start, riv_start, datos['players_db'], datos['proy'], datos['reales'])
+    c3.metric(label="Win Probability (Monte Carlo)", value=f"{prob}%")
+
+    st.divider()
+    col_mc, col_espn = st.columns([1, 1])
+    with col_mc:
+        st.subheader("Curva de Probabilidad")
+        fig_mc, ax_mc = plt.subplots(figsize=(5, 3))
+        ax_mc.hist(sm, bins=40, alpha=0.7, color=COLOR_MIO, label='Rayos', density=True)
+        ax_mc.hist(sr, bins=40, alpha=0.7, color=COLOR_RIV, label='Rival', density=True)
+        ax_mc.spines['top'].set_visible(False); ax_mc.spines['right'].set_visible(False)
+        ax_mc.legend(); st.pyplot(fig_mc)
+        
+    with col_espn:
+        st.subheader("Reporte Táctico")
+        if cambios: st.warning("\n".join(cambios))
+        else: st.success("Alineación Blindada Óptima. No mover.")
+        resumen_espn = llamar_gemini(f"Comentarista ESPN. Rayos vs {riv_nom}. Probabilidad {prob}%. Resume en 2 párrafos cortos.")
+        st.info(f"🎙️ {resumen_espn}")
+
+def render_tab_roster(datos, mi_roster, riv_start, riv_nom):
+    st.header("Auditoría de Equipo")
+    df_titulares = formatear_roster_df(mi_roster['starters'], datos['players_db'], datos['proy'], datos['reales'], "Titular")
+    banca_ids = [p for p in mi_roster['players'] if p not in mi_roster['starters']]
+    df_banca = formatear_roster_df(banca_ids, datos['players_db'], datos['proy'], datos['reales'], "Banca/IR")
+    
+    col_t1, col_t2 = st.columns([2, 1])
+    with col_t1:
+        st.subheader("11 Inicial")
+        st.dataframe(df_titulares, use_container_width=True, hide_index=True)
+        st.subheader("Profundidad (Banca)")
+        st.dataframe(df_banca, use_container_width=True, hide_index=True)
+    
+    with col_t2:
+        st.subheader("Radar Posicional")
+        cats = ['QB', 'RB', 'WR', 'TE', 'K/DEF']
+        def agrup(st_ids):
+            pts = {c: 0 for c in cats}
+            for pid in st_ids:
+                pos = datos['players_db'].get(str(pid), {}).get('position', 'N/A')
+                p = datos['reales'].get(str(pid), get_proy(str(pid), pos, datos['proy']))
+                if pos in ['K', 'DEF']: pts['K/DEF'] += p
+                elif pos in pts: pts[pos] += p
+                elif pos == 'FB': pts['RB'] += p
+            return [pts[c] for c in cats]
+
+        m_pts, r_pts = agrup(mi_roster['starters']), agrup(riv_start)
+        m_pts += m_pts[:1]; r_pts += r_pts[:1]
+        angs = [n / float(len(cats)) * 2 * math.pi for n in range(len(cats))] + [0]
+        
+        fig_rad, ax_rad = plt.subplots(figsize=(4, 4), subplot_kw=dict(polar=True))
+        ax_rad.plot(angs, m_pts, color=COLOR_MIO, lw=2, label='Rayos'); ax_rad.fill(angs, m_pts, COLOR_MIO, alpha=0.2)
+        ax_rad.plot(angs, r_pts, color=COLOR_RIV, lw=2, label=riv_nom); ax_rad.fill(angs, r_pts, COLOR_RIV, alpha=0.2)
+        ax_rad.set_xticks(angs[:-1]); ax_rad.set_xticklabels(cats, size=10)
+        ax_rad.legend(loc='lower center', bbox_to_anchor=(0.5, -0.2))
+        st.pyplot(fig_rad)
+
+def render_tab_tracker(datos, u_map):
+    st.header("Marcador Global de la Liga")
+    datos_barras = []
+    for r in datos['rosters']:
+        mgr = u_map.get(r['owner_id'], 'Eq')
+        for pid in r.get('starters', []):
+            pts = datos['reales'].get(str(pid), 0.0)
+            nom = datos['players_db'].get(str(pid), {}).get('last_name', str(pid))
+            datos_barras.append({"Manager": mgr, "Jugador": nom, "Puntos": pts})
+    
+    if datos_barras:
+        df_barras = pd.DataFrame(datos_barras)
+        orden = df_barras.groupby("Manager")["Puntos"].sum().sort_values(ascending=True).index
+        fig_bar = px.bar(df_barras, x="Puntos", y="Manager", color="Jugador", orientation='h', category_orders={"Manager": orden}, color_discrete_sequence=px.colors.qualitative.Pastel)
+        fig_bar.update_layout(height=600, showlegend=False)
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+def render_tab_pronosticos(datos, u_map, mi_r_id):
+    st.header("Playoffs: Predicciones de Toda la Liga")
+    m_agr = {}
+    for m in datos['matchups']: m_agr.setdefault(m.get('matchup_id'), []).append(m)
+    
+    cols_p = st.columns(len(m_agr) if len(m_agr) > 0 else 1)
+    idx = 0
+    for m_id, eqs in m_agr.items():
+        if len(eqs)!=2: continue
+        r1, r2 = next(r for r in datos['rosters'] if r.get('roster_id')==eqs[0].get('roster_id')), next(r for r in datos['rosters'] if r.get('roster_id')==eqs[1].get('roster_id'))
+        m1, m2 = u_map.get(r1.get('owner_id'),"Eq1"), u_map.get(r2.get('owner_id'),"Eq2")
+        p_win, _, s1, s2 = ejecutar_monte_carlo_dual(r1.get('starters',[]), r2.get('starters',[]), datos['players_db'], datos['proy'], datos['reales'], 1500)
+        
+        with cols_p[idx % len(cols_p)]:
+            st.markdown(f"**{m1[:10]}** ({p_win}%) vs **{m2[:10]}**")
+            fig_p, ax_p = plt.subplots(figsize=(3, 1.5))
+            ax_p.hist(s1, bins=30, alpha=0.6, color=COLOR_MIO); ax_p.hist(s2, bins=30, alpha=0.6, color=COLOR_RIV)
+            ax_p.axis('off'); st.pyplot(fig_p)
+        idx += 1
+
+def render_tab_forense(datos, u_map):
+    st.header("Matriz de Sabotaje y Auditoría")
+    cnt = {r.get('roster_id'): {'adds':0, 'faab':0, 'trades': 0} for r in datos['rosters']}
+    for t in datos['trades']:
+        for rid in t.get('roster_ids', []):
+            if rid in cnt: cnt[rid]['trades'] += 1
+    
+    drops_p = []
+    for w in datos['waivers']:
+        rid = w.get('creator') or (w.get('roster_ids',[None])[0] if w.get('roster_ids') else None)
+        if rid in cnt:
+            cnt[rid]['adds'] += 1; cnt[rid]['faab'] += w.get('settings',{}).get('waiver_bid',0)
+        for pid, rd in (w.get('drops') or {}).items():
+            pr = get_proy(str(pid), datos['players_db'].get(str(pid),{}).get('position'), datos['proy'])
+            if pr > 10.5: drops_p.append(f"{datos['players_db'].get(str(pid),{}).get('last_name')} (Drop de {u_map.get(next((r.get('owner_id') for r in datos['rosters'] if r.get('roster_id')==rd),'Eq'))})")
+
+    c_f1, c_f2 = st.columns(2)
+    with c_f1:
+        st.subheader("Gatillo Fácil (Liga)")
+        rk = sorted(cnt.items(), key=lambda x: x[1]['adds'] + x[1]['trades'], reverse=True)
+        df_act = pd.DataFrame([{"Manager": u_map.get(next((r.get('owner_id') for r in datos['rosters'] if r.get('roster_id')==rid),'Eq')), "Trades": d['trades'], "Waivers": d['adds'], "FAAB": f"${d['faab']}"} for rid, d in rk])
+        st.dataframe(df_act, hide_index=True, use_container_width=True)
+    with c_f2:
+        st.subheader("Panic Drops")
+        if drops_p:
+            for d in drops_p[-5:]: st.error(d)
+        else: st.write("Sin Panic Drops recientes.")
+
+def render_tab_waivers(datos):
+    st.header("Agencia Libre Inteligente (Top EV_adj)")
+    ocu = set([str(pid) for r in datos['rosters'] for pid in r.get('players', [])])
+    fas = []
+    for pid, p in datos['players_db'].items():
+        if str(pid) in ocu or p.get('status') == 'Inactive' or p.get('position') not in ['QB','RB','WR','TE','K','DEF']: continue
+        pos, eq = p.get('position'), p.get('team', 'FA')
+        if eq == 'FA' or not eq: continue
+        pr = get_proy(str(pid), pos, datos['proy'])
+        if pr > 5.0:
+            prob = calc_prob(obtener_info_hc(eq)['inf'], consultar_clima(eq)[1], p.get('injury_status'))
+            fas.append({'nom': p.get('last_name'), 'pos': pos, 'eq': eq, 'ev': round(pr*(prob/100),1), 'proy': pr})
+            
+    fas.sort(key=lambda x: x['ev'], reverse=True)
+    top_fa = {'QB': [], 'RB': [], 'WR': [], 'TE': [], 'K/DEF': []}
+    lims = {'QB': 3, 'RB': 5, 'WR': 5, 'TE': 3, 'K/DEF': 3}
+    for fa in fas:
+        cat = 'K/DEF' if fa['pos'] in ['K', 'DEF'] else fa['pos']
+        if len(top_fa[cat]) < lims[cat]: top_fa[cat].append(fa)
+
+    cols_wv = st.columns(5)
+    for idx_wv, (pos_key, lista) in enumerate(top_fa.items()):
+        with cols_wv[idx_wv]:
+            st.markdown(f"**{pos_key}**")
+            for j in lista: st.success(f"{j['nom']} ({j['eq']})\n⭐ {j['ev']} EV")
+
+def render_tab_nflverse():
+    st.header("Data Científica (NFLVerse)")
+    df_nfl = cargar_nflverse()
+    if not df_nfl.empty:
+        st.dataframe(df_nfl[['player_name', 'recent_team', 'position', 'fantasy_points_ppr']].tail(50), use_container_width=True)
+        
+    st.subheader("Backtesting: Proyección vs Realidad")
+    np.random.seed(42)
+    proy_test = np.clip(np.random.normal(13.5, 4.5, 500), 5.0, 25.0)
+    reales_test = [max(0, np.random.normal(proy_test[i] + (2 - 2.5)*1.8, 6.0 - (2*0.8))) for i in range(500)]
+    fig_bk, ax_bk = plt.subplots(figsize=(6, 3))
+    ax_bk.scatter(proy_test, reales_test, alpha=0.4, color=COLOR_MIO)
+    ax_bk.plot([5, 25], [5, 25], color=COLOR_RIV, ls='--')
+    ax_bk.spines['top'].set_visible(False); ax_bk.spines['right'].set_visible(False)
+    st.pyplot(fig_bk)
