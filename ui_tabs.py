@@ -543,28 +543,51 @@ def render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map):
         with st.spinner("Conectando con la IA... analizando vectores de probabilidad y aislando Agentes Libres..."):
             resolucion = llamar_gemini(prompt)
             st.info(resolucion)
-def render_tab_noticias(datos):
+def render_tab_noticias(datos, u_map):
     st.header("📰 Central de Noticias (ESPN & Yahoo)")
-    st.write("Escaneando la red en tiempo real. Solo mostramos noticias de jugadores que pertenecen a equipos de nuestra liga.")
+    st.write("Escaneando la red en tiempo real. Análisis de impacto impulsado por Gemini AI.")
     
-    # Juntar a todos los jugadores drafteados
-    nombres_roster = []
+    # 1. Crear un diccionario que asocie a cada jugador con su mánager
+    jugador_a_manager = {}
     for r in datos['rosters']:
+        mgr = u_map.get(r['owner_id'], 'Equipo Desconocido')
         for pid in r.get('players', []):
             p = datos['players_db'].get(str(pid), {})
             if p.get('position') in ['QB', 'RB', 'WR', 'TE']:
                 nom = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
-                if nom: nombres_roster.append(nom)
-                
+                if nom:
+                    # Guardamos el nombre en minúscula como llave para la búsqueda
+                    jugador_a_manager[nom.lower()] = mgr
+                    
     with st.spinner("Interceptando feeds de noticias (RSS)..."):
-        noticias = obtener_noticias_nfl(nombres_roster)
+        # Le enviamos la lista de nombres al motor de noticias
+        noticias = obtener_noticias_nfl(list(jugador_a_manager.keys()))
         
     if noticias:
-        for n in noticias:
-            st.info(f"🏈 **Jugadores implicados:** {', '.join(n['jugadores'])}")
+        for i, n in enumerate(noticias):
+            # 2. Identificar qué mánagers de tu liga están sufriendo o ganando con esta noticia
+            afectados = []
+            for jug_lower in n['jugadores']:
+                mgr = jugador_a_manager.get(jug_lower)
+                if mgr:
+                    afectados.append(f"{jug_lower.title()} (Roster de: {mgr})")
+            
+            afectados_str = ", ".join(afectados)
+            st.info(f"🏈 **Impacto en la Liga:** {afectados_str}")
             st.markdown(f"#### [{n['titulo']}]({n['link']})")
-            # Mostrar la descripción limpiando HTML residual si lo hubiera
             st.write(n['desc'][:300] + "..." if len(n['desc']) > 300 else n['desc'])
+            
+            # 3. El botón mágico de Gemini
+            if st.button(f"🧠 Analizar impacto en la liga", key=f"btn_ia_news_{i}"):
+                with st.spinner("Gemini analizando repercusiones tácticas..."):
+                    prompt = f"""
+                    Analiza esta noticia real de la NFL: '{n['titulo']} - {n['desc']}'. 
+                    Los jugadores mencionados pertenecen a los siguientes equipos de mi liga de Fantasy: {afectados_str}. 
+                    Redacta un párrafo analítico y directo sobre cómo esta noticia afecta (positiva o negativamente) la estrategia de esos mánagers. 
+                    Si es negativo, sugiere brevemente qué deberían hacer. Usa jerga de Fantasy Football.
+                    """
+                    analisis = llamar_gemini(prompt)
+                    st.success(f"**Veredicto de Gemini:** {analisis}")
             st.divider()
     else:
         st.success("Sin alertas críticas ni noticias de última hora en este momento para los jugadores de la liga.")
