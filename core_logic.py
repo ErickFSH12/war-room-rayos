@@ -163,3 +163,80 @@ def generar_comparativa_side_by_side(m_ids, r_ids, players_db, proy, reales):
             "Pos (Rival)": pos_r
         })
     return pd.DataFrame(filas)
+# =====================================================================
+# MOTORES PARA LOS 5 MÓDULOS AVANZADOS
+# =====================================================================
+
+def generar_heatmap_vulnerabilidad(rosters, players_db, proy, u_map):
+    datos = []
+    for r in rosters:
+        mgr = u_map.get(r['owner_id'], 'Eq')
+        pts = {'QB': 0.0, 'RB': 0.0, 'WR': 0.0, 'TE': 0.0}
+        for pid in r.get('players', []):
+            pos = players_db.get(str(pid), {}).get('position', '')
+            if pos in pts: pts[pos] += get_proy(str(pid), pos, proy)
+        datos.append({'Manager': mgr, 'QB': pts['QB'], 'RB': pts['RB'], 'WR': pts['WR'], 'TE': pts['TE']})
+    return pd.DataFrame(datos).set_index('Manager')
+
+def simular_oraculo_ros(rosters, players_db, proy, u_map):
+    # Proxy de simulación Rest of Season (ROS) basado en el EV total del roster y profundidad
+    datos_ros = []
+    for r in rosters:
+        mgr = u_map.get(r['owner_id'], 'Eq')
+        ev_total = sum([get_proy(str(p), players_db.get(str(p), {}).get('position', 'FA'), proy) for p in r.get('players', [])])
+        starters_ev = sum([get_proy(str(p), players_db.get(str(p), {}).get('position', 'FA'), proy) for p in r.get('starters', [])])
+        profundidad = ev_total - starters_ev
+        
+        # Fórmula interna ponderada: 70% titulares, 30% profundidad
+        poder_ros = (starters_ev * 0.7) + (profundidad * 0.3)
+        datos_ros.append({'Manager': mgr, 'Poder ROS': poder_ros, 'EV Titulares': starters_ev, 'EV Banca': profundidad})
+    
+    df_ros = pd.DataFrame(datos_ros).sort_values('Poder ROS', ascending=False)
+    # Normalizar a % de campeonato (aproximación)
+    df_ros['Prob Campeonato %'] = round((df_ros['Poder ROS'] / df_ros['Poder ROS'].sum()) * 100, 1)
+    return df_ros
+
+def evaluar_trade(mi_roster_ids, rival_roster_ids, pid_dar, pid_recibir, players_db, proy, reales):
+    m_new = [p for p in mi_roster_ids if str(p) != str(pid_dar)] + [pid_recibir]
+    r_new = [p for p in rival_roster_ids if str(p) != str(pid_recibir)] + [pid_dar]
+    
+    # Probabilidad antes del trade
+    prob_base, _, _, _ = ejecutar_monte_carlo_dual(mi_roster_ids, rival_roster_ids, players_db, proy, reales, 1500)
+    # Probabilidad después del trade
+    prob_post, _, _, _ = ejecutar_monte_carlo_dual(m_new, r_new, players_db, proy, reales, 1500)
+    
+    return prob_base, prob_post, round(prob_post - prob_base, 1)
+
+def escanear_handcuffs(rosters, players_db):
+    lesionados = []
+    ocu = set([str(pid) for r in rosters for pid in r.get('players', [])])
+    
+    for r in rosters:
+        for pid in r.get('players', []):
+            p = players_db.get(str(pid), {})
+            if p.get('position') in ['RB', 'WR'] and p.get('injury_status') in ['Out', 'IR', 'Doubtful']:
+                eq = p.get('team', 'FA')
+                # Buscar el reemplazo en el mismo equipo que esté Libre (FA)
+                suplentes_libres = []
+                for spid, sp in players_db.items():
+                    if sp.get('team') == eq and sp.get('position') == p.get('position') and str(spid) not in ocu and sp.get('status') != 'Inactive':
+                        suplentes_libres.append(f"{sp.get('last_name')} (FA)")
+                
+                lesionados.append({
+                    "Titular Caído": f"{p.get('first_name', '')[:1]}. {p.get('last_name')} ({p.get('position')})",
+                    "Equipo": eq,
+                    "Estatus": p.get('injury_status'),
+                    "Handcuffs Libres": ", ".join(suplentes_libres[:2]) if suplentes_libres else "Ninguno valioso"
+                })
+    return pd.DataFrame(lesionados)
+
+def generar_game_scripts(players_db, proy):
+    # Simula el Over/Under de Las Vegas sumando las proyecciones de los Skill Players por equipo
+    eq_pts = {}
+    for pid, p in players_db.items():
+        eq = p.get('team')
+        if eq and eq != 'FA' and p.get('position') in ['QB', 'RB', 'WR', 'TE']:
+            eq_pts[eq] = eq_pts.get(eq, 0) + proy.get(str(pid), 0.0)
+            
+    df_vegas = pd.DataFrame([{"Equipo NFL": k, "Proy Ofensiva Total": round(v, 1)} for k, v in eq_pts.items() if v > 20])
+    return df_vegas.sort_values("Proy Ofensiva Total", ascending=False)
