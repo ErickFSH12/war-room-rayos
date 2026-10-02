@@ -243,7 +243,7 @@ def generar_game_scripts(players_db, proy):
     return df_vegas.sort_values("Proy Ofensiva Total", ascending=False)
     # --- NUEVA TELEMETRÍA: GEMINI MASTERMIND ---
 # --- TELEMETRÍA CORREGIDA PARA GEMINI MASTERMIND ---
-def empaquetar_estado_liga_para_gemini(mi_roster, riv_start, riv_nom, prob_win, df_ros, df_heat, lista_fas):
+def empaquetar_estado_liga_para_gemini(mi_roster, riv_start, riv_nom, prob_win, df_ros, df_heat, lista_fas, noticias_rss):
     mi_ros = df_ros[df_ros['Manager'] == MI_EQUIPO_NOMBRE]['Prob Campeonato %'].values[0] if not df_ros.empty else "N/A"
     
     if not df_heat.empty:
@@ -252,8 +252,27 @@ def empaquetar_estado_liga_para_gemini(mi_roster, riv_start, riv_nom, prob_win, 
     else:
         vuln, vuln_pts = "N/A", 0
         
-    # Extraemos SOLO LOS NOMBRES EXACTOS para obligar a Gemini a no inventar
     top_fas_str = ", ".join([f"{f['nombre_completo']} ({f['pos']} - {f['eq']})" for f in lista_fas[:15]])
+
+    # Procesamiento Bayesiano (NLP Básico) de Noticias
+    impactos_bayes = []
+    catastrofe = ['tear', 'torn', 'out for season', 'carted off', 'fracture', 'surgery', 'out']
+    duda = ['questionable', 'limited', 'hamstring', 'sprain', 'protocol', 'concussion', 'missed practice']
+    oportunidad = ['named starter', 'first team reps', 'promoted', 'cleared']
+    
+    if noticias_rss:
+        for n in noticias_rss:
+            txt = (n['titulo'] + " " + n['desc']).lower()
+            jugadores_afectados = ", ".join(n['jugadores']).title()
+            
+            if any(w in txt for w in catastrofe):
+                impactos_bayes.append(f"🚨 ALERTA ROJA (Colapso Bayesiano): {jugadores_afectados} con posible lesión severa. Su proyección matemática y EV caen a 0. Mánager dueño requiere reemplazo inmediato.")
+            elif any(w in txt for w in duda):
+                impactos_bayes.append(f"⚠️ ALERTA AMARILLA (Aumento de Varianza): {jugadores_afectados} con riesgo físico. La campana de Gauss de este jugador se ensancha, volviéndolo muy riesgoso de alinear.")
+            elif any(w in txt for w in oportunidad):
+                impactos_bayes.append(f"📈 ALERTA VERDE (Boost de EV): {jugadores_afectados} tiene nueva oportunidad confirmada. Su valor esperado sube por encima de su proyección base.")
+
+    alertas_str = "\n- ".join(impactos_bayes) if impactos_bayes else "Sin anomalías mediáticas (Prior = Posterior)."
 
     estado = f"""
     ESTADO GLOBAL DE LA LIGA:
@@ -262,10 +281,13 @@ def empaquetar_estado_liga_para_gemini(mi_roster, riv_start, riv_nom, prob_win, 
     - Mi Probabilidad de Victoria (Monte Carlo): {prob_win}%
     - Mi Fuerza Resto de Temporada (ROS): Probabilidad de campeonato en {mi_ros}%.
     - Mánager más vulnerable hoy (Objetivo de Trade): '{vuln}' (Proy total: {vuln_pts} pts).
-    - MEJORES AGENTES LIBRES (WAIVERS) REALMENTE DISPONIBLES: {top_fas_str}.
+    - MEJORES AGENTES LIBRES (WAIVERS) DISPONIBLES: {top_fas_str}.
     
-    REGLA DE ORO DE SEGURIDAD MÁXIMA: 
-    Tienes ESTRICTAMENTE PROHIBIDO sugerir añadir a un Agente Libre que no esté explícitamente en la lista de arriba. Si sugieres a un jugador inventado o que ya tiene dueño, el sistema fallará. Usa SOLO los nombres provistos.
+    VECTORES DE RIESGO BAYESIANO (IMPACTO DE NOTICIAS EN VIVO):
+    - {alertas_str}
+    
+    REGLA DE ORO: 
+    Cruza los Vectores de Riesgo con el Mánager Vulnerable. Tienes PROHIBIDO sugerir un Agente Libre que no esté explícitamente en la lista de arriba.
     """
     return estado
 def render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map):
