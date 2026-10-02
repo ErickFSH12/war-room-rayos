@@ -4,12 +4,18 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import math
+import streamlit as st
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import math
 from core_logic import (get_proy, optimizar_alineacion, ejecutar_monte_carlo_dual, 
                         llamar_gemini, formatear_roster_df, cargar_nflverse, 
                         calc_prob, obtener_info_hc, consultar_clima, MI_EQUIPO_NOMBRE,
                         calcular_drift_probabilidad, generar_comparativa_side_by_side,
                         generar_heatmap_vulnerabilidad, simular_oraculo_ros, evaluar_trade,
-                        escanear_handcuffs, generar_game_scripts) # <-- IMPORTACIONES AÑADIDAS
+                        escanear_handcuffs, generar_game_scripts, empaquetar_estado_liga_para_gemini)
 
 COLOR_MIO = "#4A90E2"
 COLOR_RIV = "#E94B3C"
