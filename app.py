@@ -15,12 +15,11 @@ from ui_tabs import (
     render_tab_forense, render_tab_waivers, render_tab_nflverse, 
     render_tab_heatmap, render_tab_oraculo, render_tab_trade_machine, 
     render_tab_lesiones, render_tab_vegas_odds, render_tab_mastermind,
-    render_tab_noticias # <-- AÑADIDO
+    render_tab_noticias
 )
 
 st.title("⚡ WAR ROOM: Rayos de Jalisco")
 
-# Extracción Centralizada
 datos = extraer_datos_sleeper(SLEEPER_USERNAME)
 
 if datos:
@@ -38,10 +37,10 @@ if datos:
         tabs = st.tabs([
             "⚔️ Resumen Live", "⚖️ Side-by-Side", "📋 Mi Roster", 
             "📈 Histórico", "📊 Tracker Liga", "🔮 Predicciones", 
-            "🕵‍♂️ Sabotaje", "🦅 Waivers", "🏈 NFLVerse", 
+            "🕵‍♂️️ Sabotaje", "🦅 Waivers", "🏈 NFLVerse", 
             "🗺️ Heatmap", "🧠 Oráculo ROS", "🤝 Trade Machine", 
             "🚑 Lesiones", "🎲 Vegas Odds", "🤖 Mastermind", 
-            "📰 Noticias Liga" # <-- AÑADIDO
+            "📰 Noticias Liga"
         ])
 
         # INYECCIÓN MODULAR ORDENADA
