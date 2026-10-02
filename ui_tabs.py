@@ -155,31 +155,49 @@ def render_tab_forense(datos, u_map):
         else: st.write("Sin Panic Drops recientes.")
 
 def render_tab_waivers(datos):
-    st.header("Agencia Libre Inteligente (Top EV_adj)")
-    ocu = set([str(pid) for r in datos['rosters'] for pid in r.get('players', [])])
-    fas = []
-    for pid, p in datos['players_db'].items():
-        if str(pid) in ocu or p.get('status') == 'Inactive' or p.get('position') not in ['QB','RB','WR','TE','K','DEF']: continue
-        pos, eq = p.get('position'), p.get('team', 'FA')
-        if eq == 'FA' or not eq: continue
-        pr = get_proy(str(pid), pos, datos['proy'])
-        if pr > 5.0:
-            prob = calc_prob(obtener_info_hc(eq)['inf'], consultar_clima(eq)[1], p.get('injury_status'))
-            fas.append({'nom': p.get('last_name'), 'pos': pos, 'eq': eq, 'ev': round(pr*(prob/100),1), 'proy': pr})
+    st.header("🦅 Agencia Libre Dinámica (Waivers + NFLVerse)")
+    st.write("Filtra y analiza los mejores jugadores disponibles cruzando proyecciones con su media histórica real.")
+    
+    df_nfl = cargar_nflverse()
+    fas = obtener_mejores_waivers(datos['rosters'], datos['players_db'], datos['proy'], df_nfl)
+    
+    if not fas:
+        st.warning("No hay agentes libres destacables en este momento.")
+        return
+        
+    df_fa = pd.DataFrame(fas)
+    df_fa = df_fa.rename(columns={
+        'nombre_completo': 'Jugador', 'pos': 'Pos', 'eq': 'Equipo', 
+        'ev': 'EV_adj', 'proy': 'Proyección', 'hist_avg': 'Media (NFLVerse)', 'inj': 'Salud'
+    })
+    
+    # Filtros interactivos
+    c1, c2 = st.columns([1, 3])
+    with c1:
+        st.markdown("### Filtros")
+        filtro_pos = st.selectbox("Posición", ["Todas", "QB", "RB", "WR", "TE", "K", "DEF"])
+        if filtro_pos != "Todas":
+            df_fa = df_fa[df_fa['Pos'] == filtro_pos]
             
-    fas.sort(key=lambda x: x['ev'], reverse=True)
-    top_fa = {'QB': [], 'RB': [], 'WR': [], 'TE': [], 'K/DEF': []}
-    lims = {'QB': 3, 'RB': 5, 'WR': 5, 'TE': 3, 'K/DEF': 3}
-    for fa in fas:
-        cat = 'K/DEF' if fa['pos'] in ['K', 'DEF'] else fa['pos']
-        if len(top_fa[cat]) < lims[cat]: top_fa[cat].append(fa)
-
-    cols_wv = st.columns(5)
-    for idx_wv, (pos_key, lista) in enumerate(top_fa.items()):
-        with cols_wv[idx_wv]:
-            st.markdown(f"**{pos_key}**")
-            for j in lista: st.success(f"{j['nom']} ({j['eq']})\n⭐ {j['ev']} EV")
-
+        filtro_min_proy = st.slider("Proyección Mínima", 0.0, 20.0, 5.0)
+        df_fa = df_fa[df_fa['Proyección'] >= filtro_min_proy]
+        
+    with c2:
+        if not df_fa.empty:
+            fig = px.scatter(
+                df_fa.head(40), x="Proyección", y="EV_adj", color="Pos", 
+                hover_name="Jugador", size="Proyección", 
+                title="Cazador de Gemas: Valor Esperado vs Proyección Base Sleeper",
+                color_discrete_sequence=px.colors.qualitative.Pastel
+            )
+            fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No hay jugadores que cumplan los filtros actuales.")
+            
+    st.divider()
+    st.subheader("📋 Base de Datos de Disponibles (Top 50)")
+    st.dataframe(df_fa[['Jugador', 'Pos', 'Equipo', 'EV_adj', 'Proyección', 'Media (NFLVerse)', 'Salud']].head(50), hide_index=True, use_container_width=True)
 def render_tab_nflverse():
     st.header("Data Científica (NFLVerse)")
     df_nfl = cargar_nflverse()
@@ -469,7 +487,6 @@ def render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map):
     st.header("🧠 El Cerebro: Modelos Estadísticos y Gemini Mastermind")
     st.write("Transparencia algorítmica y síntesis predictiva de IA para dominar el mercado.")
 
-    # 1. TRANSPARENCIA ESTADÍSTICA (EXPOSICIÓN DE LAS FÓRMULAS)
     with st.expander("📊 Ver Matemáticas y Modelos Activos bajo el capó", expanded=False):
         c_m1, c_m2, c_m3 = st.columns(3)
         with c_m1:
@@ -486,26 +503,17 @@ def render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map):
             st.caption("Se simulan 5,000 partidos iterando las curvas normales. Los puntos reales ya jugados asumen $\sigma = 0$ (varianza nula).")
 
     st.divider()
-
-    # 2. SÍNTESIS DE GEMINI (EL PLAN MAESTRO)
     st.subheader("🤖 Análisis Estratégico y Anticipación de Movimientos")
     
-    # Recolectar datos en background para alimentar a la IA
     prob_win, _, _, _ = ejecutar_monte_carlo_dual(mi_roster['starters'], riv_start, datos['players_db'], datos['proy'], datos['reales'], 1000)
-    
     df_ros = simular_oraculo_ros(datos['rosters'], datos['players_db'], datos['proy'], u_map)
     df_heat = generar_heatmap_vulnerabilidad(datos['rosters'], datos['players_db'], datos['proy'], u_map)
     
-    fas = []
-    ocu = set([str(pid) for r in datos['rosters'] for pid in r.get('players', [])])
-    for pid, p in datos['players_db'].items():
-        if str(pid) not in ocu and p.get('status') != 'Inactive' and p.get('team') != 'FA' and p.get('position') in ['RB','WR']:
-            pr = get_proy(str(pid), p.get('position'), datos['proy'])
-            if pr > 6.0: fas.append({'nom': p.get('last_name'), 'pos': p.get('position'), 'ev': pr})
-    fas.sort(key=lambda x: x['ev'], reverse=True)
+    # LA CONEXIÓN: Extraemos la misma lista unificada que usa la pestaña de Waivers
+    df_nfl = cargar_nflverse()
+    fas_unificados = obtener_mejores_waivers(datos['rosters'], datos['players_db'], datos['proy'], df_nfl)
 
-    # Empaquetar estado para la IA usando la función del core_logic
-    contexto_liga = empaquetar_estado_liga_para_gemini(mi_roster, riv_start, riv_nom, prob_win, df_ros, df_heat, fas)
+    contexto_liga = empaquetar_estado_liga_para_gemini(mi_roster, riv_start, riv_nom, prob_win, df_ros, df_heat, fas_unificados)
 
     prompt = f"""
     Eres el analista de datos jefe (Data Scientist) de mi equipo de Fantasy Football.
@@ -520,6 +528,6 @@ def render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map):
     """
 
     if st.button("🧠 Procesar Telemetría y Generar Plan Maestro (Gemini API)"):
-        with st.spinner("Conectando con la IA... analizando vectores de probabilidad..."):
+        with st.spinner("Conectando con la IA... analizando vectores de probabilidad y aislando Agentes Libres..."):
             resolucion = llamar_gemini(prompt)
             st.info(resolucion)
