@@ -11,7 +11,8 @@ sns.set_theme(style="whitegrid", palette="pastel")
 from core_logic import extraer_datos_sleeper, SLEEPER_USERNAME, MI_EQUIPO_NOMBRE
 from ui_tabs import (render_tab_live, render_tab_roster, render_tab_tracker, 
                      render_tab_pronosticos, render_tab_forense, 
-                     render_tab_waivers, render_tab_nflverse, render_tab_desempeno) # <- IMPORTACIÓN AÑADIDA
+                     render_tab_waivers, render_tab_nflverse, render_tab_desempeno,
+                     render_tab_side_by_side)
 
 st.title("⚡ WAR ROOM: Rayos de Jalisco")
 
@@ -29,17 +30,28 @@ if datos:
     riv_start = next((r.get('starters', []) for r in datos["rosters"] if r.get('roster_id') == riv_r_id), [])
     
     if mi_roster:
-        # CREACIÓN DE PESTAÑAS (AHORA SON 8)
-        tabs = st.tabs(["⚔️ Resumen Live", "📋 Mi Roster & Táctica", "📈 Desempeño Histórico", "📊 Tracker Liga", "🔮 Predicciones", "🕵️‍♂️ Sabotaje", "🦅 Waivers", "🏈 Data NFLVerse"])
+        # CREACIÓN DE PESTAÑAS (9 PESTAÑAS COMPLETAS)
+        tabs = st.tabs([
+            "⚔️ Resumen Live", 
+            "⚖️ Side-by-Side Live", 
+            "📋 Mi Roster & Táctica", 
+            "📈 Desempeño Histórico", 
+            "📊 Tracker Liga", 
+            "🔮 Predicciones", 
+            "🕵️️‍♂️ Sabotaje", 
+            "🦅 Waivers", 
+            "🏈 Data NFLVerse"
+        ])
 
         # INYECCIÓN MODULAR
         with tabs[0]: render_tab_live(datos, mi_roster, riv_start, riv_nom)
-        with tabs[1]: render_tab_roster(datos, mi_roster, riv_start, riv_nom)
-        with tabs[2]: render_tab_desempeno(datos, mi_roster) # <- NUEVO TAB INYECTADO AQUÍ
-        with tabs[3]: render_tab_tracker(datos, u_map)
-        with tabs[4]: render_tab_pronosticos(datos, u_map, mi_r_id)
-        with tabs[5]: render_tab_forense(datos, u_map)
-        with tabs[6]: render_tab_waivers(datos)
-        with tabs[7]: render_tab_nflverse()
+        with tabs[1]: render_tab_side_by_side(datos, mi_roster, riv_start, riv_nom, mi_r_id, u_map)
+        with tabs[2]: render_tab_roster(datos, mi_roster, riv_start, riv_nom)
+        with tabs[3]: render_tab_desempeno(datos, mi_roster)
+        with tabs[4]: render_tab_tracker(datos, u_map)
+        with tabs[5]: render_tab_pronosticos(datos, u_map, mi_r_id)
+        with tabs[6]: render_tab_forense(datos, u_map)
+        with tabs[7]: render_tab_waivers(datos)
+        with tabs[8]: render_tab_nflverse()
 else:
     st.error("Error conectando a la API de Sleeper. Revisa la conexión.")
