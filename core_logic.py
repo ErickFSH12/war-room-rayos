@@ -3,6 +3,7 @@ import requests
 import numpy as np
 import pandas as pd
 from google import genai
+import xml.etree.ElementTree as ET
 
 # --- CONSTANTES GLOBALES ---
 API_GEMINI = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else ""
@@ -366,3 +367,43 @@ def obtener_mejores_waivers(rosters, players_db, proy, df_nfl=None):
             
     fas.sort(key=lambda x: x['ev'], reverse=True)
     return fas
+# --- MÓDULO DE NOTICIAS RSS (ESPN Y YAHOO) ---
+@st.cache_data(ttl=3600) # Cachear noticias 1 hora
+def obtener_noticias_nfl(nombres_jugadores):
+    urls = [
+        "https://www.espn.com/espn/rss/nfl/news",
+        "https://sports.yahoo.com/nfl/rss/"
+    ]
+    noticias = []
+    
+    for url in urls:
+        try:
+            resp = requests.get(url, timeout=5)
+            root = ET.fromstring(resp.content)
+            for item in root.findall('.//item'):
+                title = item.find('title').text if item.find('title') is not None else ""
+                desc = item.find('description').text if item.find('description') is not None else ""
+                link = item.find('link').text if item.find('link') is not None else ""
+                
+                texto_full = (title + " " + desc).lower()
+                # Filtrar solo si se menciona un jugador de la liga
+                mencionados = [nom for nom in nombres_jugadores if nom.lower() in texto_full]
+                
+                if mencionados:
+                    noticias.append({
+                        "titulo": title,
+                        "desc": desc,
+                        "link": link,
+                        "jugadores": mencionados
+                    })
+        except: pass
+    
+    # Eliminar noticias duplicadas
+    vistos = set()
+    noticias_unicas = []
+    for n in noticias:
+        if n['titulo'] not in vistos:
+            vistos.add(n['titulo'])
+            noticias_unicas.append(n)
+            
+    return noticias_unicas
