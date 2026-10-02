@@ -1,0 +1,9 @@
+streamlit
+streamlit-autorefresh
+requests
+numpy
+pandas
+matplotlib
+seaborn
+scipy
+google-genai
