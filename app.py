@@ -57,3 +57,21 @@ if datos:
         with tabs[13]: render_tab_vegas_odds(datos)
 else:
     st.error("Error conectando a la API de Sleeper. Revisa la conexión.")
+
+# Modifica la importación en app.py para incluir la nueva pestaña
+from ui_tabs import (..., render_tab_mastermind)
+
+# [...]
+
+        # AÑADE LA PESTAÑA A LA LISTA
+        tabs = st.tabs([
+            "⚔️️ Resumen Live", "⚖️ Side-by-Side", "📋 Mi Roster", 
+            "📈 Histórico", "📊 Tracker Liga", "🔮 Predicciones", 
+            "🕵‍♂️ Sabotaje", "🦅 Waivers", "🏈 NFLVerse", 
+            "🗺️ Heatmap", "🧠 Oráculo ROS", "🤝 Trade Machine", 
+            "🚑 Lesiones", "🎲 Vegas Odds", "🤖 Gemini Mastermind" # <-- NUEVA
+        ])
+
+        # [...]
+        # AÑADE LA INYECCIÓN AL FINAL
+        with tabs[14]: render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map)
