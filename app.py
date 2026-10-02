@@ -60,6 +60,6 @@ if datos:
         with tabs[12]: render_tab_lesiones(datos)
         with tabs[13]: render_tab_vegas_odds(datos)
         with tabs[14]: render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map)
-        with tabs[15]: render_tab_noticias(datos) # <-- AÑADIDO
+        with tabs[15]: render_tab_noticias(datos, u_map)
 else:
     st.error("Error conectando a la API de Sleeper. Revisa la conexión.")
