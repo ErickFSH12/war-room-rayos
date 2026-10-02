@@ -240,3 +240,27 @@ def generar_game_scripts(players_db, proy):
             
     df_vegas = pd.DataFrame([{"Equipo NFL": k, "Proy Ofensiva Total": round(v, 1)} for k, v in eq_pts.items() if v > 20])
     return df_vegas.sort_values("Proy Ofensiva Total", ascending=False)
+    # --- NUEVA TELEMETRÍA: GEMINI MASTERMIND ---
+def empaquetar_estado_liga_para_gemini(mi_roster, riv_start, riv_nom, prob_win, df_ros, df_heat, fas):
+    # Compilar un diccionario de estado global para que la IA lo analice
+    mi_ros = df_ros[df_ros['Manager'] == MI_EQUIPO_NOMBRE]['Prob Campeonato %'].values[0] if not df_ros.empty else "N/A"
+    
+    # Encontrar al manager más vulnerable basado en el Heatmap
+    if not df_heat.empty:
+        vuln = df_heat.sum(axis=1).idxmin()
+        vuln_pts = round(df_heat.sum(axis=1).min(), 1)
+    else:
+        vuln, vuln_pts = "N/A", 0
+        
+    top_fas = [f"{f['nom']} ({f['pos']}) EV:{f['ev']}" for f in fas[:3]] if fas else []
+
+    estado = f"""
+    ESTADO GLOBAL DE LA LIGA:
+    - Mi Equipo: {MI_EQUIPO_NOMBRE}
+    - Mi Rival de esta semana: {riv_nom}
+    - Mi Probabilidad de Victoria (Monte Carlo): {prob_win}%
+    - Mi Fuerza Resto de Temporada (ROS): Top/Probabilidad de campeonato calculada en {mi_ros}%.
+    - Mánager más vulnerable hoy (Objetivo de Trade): '{vuln}' (Proy total: {vuln_pts} pts).
+    - Mejores Agentes Libres (Waivers) detectados por Modelo EV: {', '.join(top_fas)}.
+    """
+    return estado
