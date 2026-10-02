@@ -26,7 +26,6 @@ client = genai.Client(api_key=API_GEMINI)
 
 ESTADIOS_COORDS = {"KC": (39.0997, -94.5786), "LV": (36.0909, -115.1833), "DEN": (39.7439, -105.0201), "NYJ": (40.8135, -74.0744), "MIN": (44.9738, -93.2581), "SF": (37.4033, -121.9694), "ARI": (33.5276, -112.2626), "BUF": (42.7738, -78.7870), "BAL": (39.2779, -76.6227), "PHI": (39.9008, -75.1675), "PIT": (40.4468, -80.0158), "JAX": (30.3239, -81.6373), "NO": (29.9511, -90.0812), "IND": (39.7601, -86.1639), "TEN": (36.1665, -86.7713), "LAR": (33.9535, -118.3390)}
 HC_EQUIPOS_REALES = {"KC": {"hc": "Andy Reid", "inf": 4}, "LV": {"hc": "Antonio Pierce", "inf": 3}, "DEN": {"hc": "Sean Payton", "inf": 3}, "NYJ": {"hc": "Aaron Glenn", "inf": 2}, "MIN": {"hc": "Kevin O'Connell", "inf": 4}, "SF": {"hc": "Kyle Shanahan", "inf": 4}, "ARI": {"hc": "Jonathan Gannon", "inf": 2}, "BUF": {"hc": "Sean McDermott", "inf": 4}, "BAL": {"hc": "John Harbaugh", "inf": 4}, "PHI": {"hc": "Nick Sirianni", "inf": 4}, "PIT": {"hc": "Mike Tomlin", "inf": 3}, "JAX": {"hc": "Doug Pederson", "inf": 3}, "NO": {"hc": "Dennis Allen", "inf": 2}, "IND": {"hc": "Shane Steichen", "inf": 3}, "TEN": {"hc": "Brian Callahan", "inf": 3}, "LAR": {"hc": "Sean McVay", "inf": 4}}
-PERFILES_MANAGERS = {"Los Rayos de Jalisco": "Analítico.", "MascaritaSagrada": "Upside/Novatos.", "Luis39cem": "Acumulador RBs.", "Ruthlessbergers": "Emocional.", "Philly Kings": "Funcional.", "GaMus Sport": "Eficiente.", "Blue Anchors Corps": "Equilibrado.", "All The Poohs Men": "Tiburón de draft.", "Billstzkrieg": "Ludópata.", "Renato": "Analítico."}
 
 def obtener_info_hc(eq): return HC_EQUIPOS_REALES.get(eq, {"hc": "Estándar", "inf": 3})
 def get_proy(pid, pos, dict_p): return round(dict_p[pid], 1) if pid in dict_p and dict_p[pid]>0 else {"QB":17.5, "RB":13.5, "WR":13.0, "TE":8.8, "K":8.0, "DEF":7.5}.get(pos, 10.0)
@@ -77,8 +76,6 @@ def cargar_nflverse():
     try: return pd.read_csv("https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats.csv", low_memory=False).query("season >= 2024").copy()
     except: return pd.DataFrame()
 
-# --- MOTORES DE CÁLCULO ---
-# ¡AQUÍ ESTABA EL ERROR! Función renombrada a ejecutar_monte_carlo_dual
 def ejecutar_monte_carlo_dual(m_ids, r_ids, players_db, proyecciones, reales, n_sims=5000):
     def simular(ids):
         sims = np.zeros(n_sims)
@@ -132,7 +129,7 @@ def llamar_gemini(prompt):
     except: return "Conexión a ESPN interrumpida."
 
 # =====================================================================
-# INTERFAZ WEB MINIMALISTA
+# INTERFAZ WEB
 # =====================================================================
 st.title("⚡ WAR ROOM: Rayos de Jalisco")
 
@@ -154,8 +151,6 @@ if datos:
         # --- TAB 1: RESUMEN LIVE ---
         with tabs[0]:
             st.header(f"Matchup Semana {datos['semana']}")
-            
-            # Métricas en vivo
             m_aseg = sum([datos['reales'][str(p)] for p in mi_roster['starters'] if str(p) in datos['reales']])
             m_rest = sum([datos['proy'].get(str(p), 0.0) for p in mi_roster['starters'] if str(p) not in datos['reales']])
             r_aseg = sum([datos['reales'][str(p)] for p in riv_start if str(p) in datos['reales']])
@@ -170,7 +165,6 @@ if datos:
             c3.metric(label="Win Probability (Monte Carlo)", value=f"{prob}%")
 
             st.divider()
-            
             col_mc, col_espn = st.columns([1, 1])
             with col_mc:
                 st.subheader("Curva de Probabilidad")
@@ -186,14 +180,12 @@ if datos:
                 st.subheader("Reporte Táctico")
                 if cambios: st.warning("\n".join(cambios))
                 else: st.success("Alineación Blindada Óptima. No mover.")
-                
                 resumen_espn = llamar_gemini(f"Comentarista ESPN. Rayos vs {riv_nom}. Probabilidad {prob}%. Resume en 2 párrafos cortos.")
                 st.info(f"🎙️ {resumen_espn}")
 
         # --- TAB 2: MI ROSTER & TÁCTICA ---
         with tabs[1]:
             st.header("Auditoría de Equipo")
-            
             df_titulares = formatear_roster_df(mi_roster['starters'], datos['players_db'], datos['proy'], datos['reales'], "Titular")
             banca_ids = [p for p in mi_roster['players'] if p not in mi_roster['starters']]
             df_banca = formatear_roster_df(banca_ids, datos['players_db'], datos['proy'], datos['reales'], "Banca/IR")
@@ -239,36 +231,39 @@ if datos:
             datos_barras = []
             for r in datos['rosters']:
                 mgr = u_map.get(r['owner_id'], 'Eq')
+                # Muestra TODOS LOS JUGADORES, aunque estén en 0, para que todos los 10 equipos aparezcan.
                 for pid in r.get('starters', []):
                     pts = datos['reales'].get(str(pid), 0.0)
-                    if pts > 0:
-                        nom = datos['players_db'].get(str(pid), {}).get('last_name', str(pid))
-                        datos_barras.append({"Manager": mgr, "Jugador": nom, "Puntos": pts})
+                    nom = datos['players_db'].get(str(pid), {}).get('last_name', str(pid))
+                    datos_barras.append({"Manager": mgr, "Jugador": nom, "Puntos": pts})
             
             if datos_barras:
                 df_barras = pd.DataFrame(datos_barras)
                 orden = df_barras.groupby("Manager")["Puntos"].sum().sort_values(ascending=True).index
-                fig_bar = px.bar(df_barras, x="Puntos", y="Manager", color="Jugador", orientation='h', category_orders={"Manager": orden}, color_discrete_sequence=px.colors.qualitative.Pastel)
-                fig_bar.update_layout(height=500, showlegend=False)
+                fig_bar = px.bar(
+                    df_barras, x="Puntos", y="Manager", color="Jugador", 
+                    orientation='h', category_orders={"Manager": orden}, 
+                    color_discrete_sequence=px.colors.qualitative.Pastel
+                )
+                fig_bar.update_layout(height=600, showlegend=False)
                 st.plotly_chart(fig_bar, use_container_width=True)
-            else:
-                st.write("Ningún jugador ha sumado puntos reales todavía.")
 
-        # --- TAB 4: PRONÓSTICOS ---
+        # --- TAB 4: PRONÓSTICOS DE LOS 10 EQUIPOS ---
         with tabs[3]:
-            st.header("Playoffs: Predicciones del Resto de la Liga")
+            st.header("Playoffs: Predicciones de Toda la Liga")
             m_agr = {}
             for m in datos['matchups']: m_agr.setdefault(m.get('matchup_id'), []).append(m)
             
-            cols_p = st.columns(4)
+            # Usamos 5 columnas para mostrar todos los 5 enfrentamientos de la liga (10 equipos)
+            cols_p = st.columns(len(m_agr) if len(m_agr) > 0 else 1)
             idx = 0
             for m_id, eqs in m_agr.items():
-                if len(eqs)!=2 or eqs[0].get('roster_id')==mi_r_id or eqs[1].get('roster_id')==mi_r_id: continue
+                if len(eqs)!=2: continue
                 r1, r2 = next(r for r in datos['rosters'] if r.get('roster_id')==eqs[0].get('roster_id')), next(r for r in datos['rosters'] if r.get('roster_id')==eqs[1].get('roster_id'))
                 m1, m2 = u_map.get(r1.get('owner_id'),"Eq1"), u_map.get(r2.get('owner_id'),"Eq2")
                 p_win, _, s1, s2 = ejecutar_monte_carlo_dual(r1.get('starters',[]), r2.get('starters',[]), datos['players_db'], datos['proy'], datos['reales'], 1500)
                 
-                with cols_p[idx % 4]:
+                with cols_p[idx % len(cols_p)]:
                     st.markdown(f"**{m1[:10]}** ({p_win}%) vs **{m2[:10]}**")
                     fig_p, ax_p = plt.subplots(figsize=(3, 1.5))
                     ax_p.hist(s1, bins=30, alpha=0.6, color=COLOR_MIO); ax_p.hist(s2, bins=30, alpha=0.6, color=COLOR_RIV)
@@ -276,7 +271,7 @@ if datos:
                     st.pyplot(fig_p)
                 idx += 1
 
-        # --- TAB 5: FORENSE Y SABOTAJE ---
+        # --- TAB 5: FORENSE Y SABOTAJE (LOS 10 MANAGERS) ---
         with tabs[4]:
             st.header("Matriz de Sabotaje y Auditoría")
             cnt = {r.get('roster_id'): {'adds':0, 'faab':0, 'trades': 0} for r in datos['rosters']}
@@ -297,8 +292,9 @@ if datos:
             with c_f1:
                 st.subheader("Gatillo Fácil (Trades/Waivers)")
                 rk = sorted(cnt.items(), key=lambda x: x[1]['adds'] + x[1]['trades'], reverse=True)
-                for rid, d in rk[:5]:
-                    st.write(f"- **{u_map.get(next((r.get('owner_id') for r in datos['rosters'] if r.get('roster_id')==rid),'Eq'))}**: {d['trades']} Trades | {d['adds']} Adds | ${d['faab']} FAAB")
+                # Muestra a los 10 managers completos en la tabla
+                df_act = pd.DataFrame([{"Manager": u_map.get(next((r.get('owner_id') for r in datos['rosters'] if r.get('roster_id')==rid),'Eq')), "Trades": d['trades'], "Waivers": d['adds'], "FAAB Gastado": f"${d['faab']}"} for rid, d in rk])
+                st.dataframe(df_act, hide_index=True, use_container_width=True)
             with c_f2:
                 st.subheader("Panic Drops")
                 if drops_p:
