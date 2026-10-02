@@ -431,10 +431,9 @@ def render_tab_oraculo(datos, u_map):
         st.plotly_chart(fig, use_container_width=True)
 
 def render_tab_trade_machine(datos, mi_roster, u_map):
-    st.header("🤝 La Máquina de Trades ('What If' Engine)")
-    st.write("Simula cómo un trade afectaría matemáticamente tus probabilidades de ganar esta semana.")
+    st.header("🤝 La Máquina de Trades (Math + AI Notebook)")
+    st.write("Simula el impacto matemático de un trade y pide el veredicto a la IA inyectando tus propias fuentes externas.")
     
-    # Preparar listas de selección
     mis_jugadores_opciones = {f"{datos['players_db'].get(str(p), {}).get('last_name')} ({datos['players_db'].get(str(p), {}).get('position')})": p for p in mi_roster['players']}
     
     rivales_opciones = {}
@@ -447,26 +446,50 @@ def render_tab_trade_machine(datos, mi_roster, u_map):
 
     c1, c2 = st.columns(2)
     with c1:
+        st.subheader("1. Jugadores Implicados")
         dar_seleccion = st.selectbox("Dar a (Tu jugador):", list(mis_jugadores_opciones.keys()))
-    with c2:
         recibir_seleccion = st.selectbox("Recibir a (Jugador Rival):", list(rivales_opciones.keys()))
-
-    if st.button("⚖️ Simular Impacto del Trade"):
+    
+    with c2:
+        st.subheader("2. Fuentes Externas (Notebook RAG)")
+        fuentes_input = st.text_area("📚 Contexto (Reddit, Schefter, Rumores)", height=110, placeholder="Ej: Según Adam Schefter, el corredor titular estará fuera 3 semanas...")
+        
+    st.divider()
+    if st.button("⚖️ Ejecutar Simulación y Análisis de IA", use_container_width=True):
         pid_dar = mis_jugadores_opciones[dar_seleccion]
         pid_recibir = rivales_opciones[recibir_seleccion]['pid']
         rival_starters = rivales_opciones[recibir_seleccion]['starters']
         
-        pb, pp, delta = evaluar_trade(mi_roster['starters'], rival_starters, pid_dar, pid_recibir, datos['players_db'], datos['proy'], datos['reales'])
+        # Extracción de nombres para la API y RSS
+        nom_dar = dar_seleccion.split(" (")[0]
+        nom_recibir = recibir_seleccion.split(" (")[0]
+        proy_dar = round(datos['proy'].get(str(pid_dar), 0.0), 1)
+        proy_recibir = round(datos['proy'].get(str(pid_recibir), 0.0), 1)
         
-        st.divider()
-        st.subheader("Resultado de la Simulación")
+        with st.spinner("Simulando Monte Carlo y conectando con Gemini..."):
+            # 1. Ejecutar las matemáticas (Simulador original)
+            pb, pp, delta = evaluar_trade(mi_roster['starters'], rival_starters, pid_dar, pid_recibir, datos['players_db'], datos['proy'], datos['reales'])
+            
+            # 2. Buscar noticias de ambos jugadores
+            from core_logic import obtener_noticias_nfl, evaluar_trade_interactivo
+            noticias = obtener_noticias_nfl([nom_dar.lower(), nom_recibir.lower()])
+            noticias_str = ""
+            if noticias:
+                for n in noticias: noticias_str += f"- {n['titulo']}: {n['desc'][:100]}...\n"
+            else:
+                noticias_str = "Sin reportes recientes."
+            
+            # 3. Generar el Veredicto de IA
+            analisis = evaluar_trade_interactivo(nom_dar, nom_recibir, delta, fuentes_input, proy_dar, proy_recibir, noticias_str)
+            
+        # MOSTRAR RESULTADOS
         c_res1, c_res2, c_res3 = st.columns(3)
         c_res1.metric("Probabilidad Pre-Trade", f"{pb}%")
         c_res2.metric("Probabilidad Post-Trade", f"{pp}%")
-        c_res3.metric("Impacto Neto (Δ)", f"{'+' if delta >= 0 else ''}{delta}%", delta=f"{delta}%", delta_color="normal")
+        c_res3.metric("Impacto Matemático (Δ)", f"{'+' if delta >= 0 else ''}{delta}%", delta=f"{delta}%", delta_color="normal")
         
-        if delta > 0: st.success("Trade Favorable. Aceptarlo aumenta tus chances esta semana.")
-        else: st.error("Trade Tóxico. Matemáticamente pierdes ventaja en este enfrentamiento.")
+        st.subheader("🤖 Veredicto del Mastermind")
+        st.info(analisis)
 
 def render_tab_lesiones(datos):
     st.header("🚑 Alertas de Lesión y Handcuffs")
