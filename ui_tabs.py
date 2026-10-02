@@ -263,3 +263,100 @@ def render_tab_desempeno(datos, mi_roster):
             st.warning("⚠️ No se cruzaron datos exactos con NFLVerse. Esto puede pasar con jugadores novatos, defensas (DEF) o sufijos como 'Jr.' y 'III'.")
     else:
         st.error("No se pudo cargar la base de NFLVerse.")
+def render_tab_side_by_side(datos, mi_roster, riv_start, riv_nom, mi_r_id, u_map):
+    st.header("⚖️ Análisis Side-by-Side en Tiempo Real")
+    st.write("Tracking de enfrentamiento directo y desviación en vivo respecto al pronóstico original.")
+
+    # -------------------------------------------------------------
+    # SECCIÓN 1: NUESTRO ENFRENTAMIENTO DIRECTO (H2H)
+    # -------------------------------------------------------------
+    st.subheader(f"1. Duelo Directo: {MI_EQUIPO_NOMBRE} vs {riv_nom}")
+    
+    # Cálculo de desviación (Drift)
+    prob_base, prob_live, delta_prob = calcular_drift_probabilidad(
+        mi_roster['starters'], riv_start, datos['players_db'], datos['proy'], datos['reales']
+    )
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Pronóstico Inicial (Pre-Game)", f"{prob_base}%", help="Probabilidad teórica antes de iniciar la jornada.")
+    c2.metric("Probabilidad Actual (Live)", f"{prob_live}%", help="Probabilidad calculada con los puntos reales jugados.")
+    c3.metric(
+        "Variación / Drift (Δ)", 
+        f"{'+' if delta_prob >= 0 else ''}{delta_prob}%", 
+        delta=f"{delta_prob}% vs Pre-Game",
+        delta_color="normal"
+    )
+
+    if delta_prob > 0:
+        st.success(f"📈 **Tendencia Favorable:** La jornada se está inclinando hacia nosotros por +{delta_prob}% sobre lo pronosticado.")
+    elif delta_prob < 0:
+        st.warning(f"📉 **Desviación de Riesgo:** El matchup se ha cerrado en {delta_prob}% respecto a la expectativa inicial.")
+    else:
+        st.info("⚖️ **En Línea con el Modelo:** El desarrollo va exactamente conforme al pronóstico inicial.")
+
+    # Tabla Side-by-Side
+    df_sbs = generar_comparativa_side_by_side(mi_roster['starters'], riv_start, datos['players_db'], datos['proy'], datos['reales'])
+    st.dataframe(df_sbs, hide_index=True, use_container_width=True)
+
+    # Gráfico Comparativo Slot por Slot
+    df_plot = df_sbs[df_sbs['Rayos de Jalisco'] != "-"].copy()
+    fig_sbs = px.bar(
+        df_plot, 
+        x="Rayos de Jalisco", 
+        y=["Pts (Rayos)", "Pts (Rival)"], 
+        barmode="group",
+        title="Cara a Cara: Aporte por Posición",
+        color_discrete_sequence=[COLOR_MIO, COLOR_RIV]
+    )
+    fig_sbs.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", legend_title_text="Equipo")
+    st.plotly_chart(fig_sbs, use_container_width=True)
+
+    st.divider()
+
+    # -------------------------------------------------------------
+    # SECCIÓN 2: SIDE-BY-SIDE DE TODA LA LIGA (LOS 5 ENFRENTAMIENTOS)
+    # -------------------------------------------------------------
+    st.subheader("2. Pizarrón de la Liga: Los 5 Enfrentamientos Frente a Frente")
+    
+    m_agr = {}
+    for m in datos['matchups']:
+        m_agr.setdefault(m.get('matchup_id'), []).append(m)
+
+    for m_id, eqs in m_agr.items():
+        if len(eqs) != 2:
+            continue
+        r1 = next(r for r in datos['rosters'] if r.get('roster_id') == eqs[0].get('roster_id'))
+        r2 = next(r for r in datos['rosters'] if r.get('roster_id') == eqs[1].get('roster_id'))
+        m1 = u_map.get(r1.get('owner_id'), "Equipo 1")
+        m2 = u_map.get(r2.get('owner_id'), "Equipo 2")
+
+        # Puntos asegurados y totales esperados
+        m1_aseg = sum([datos['reales'][str(p)] for p in r1.get('starters', []) if str(p) in datos['reales']])
+        m1_rest = sum([datos['proy'].get(str(p), 0.0) for p in r1.get('starters', []) if str(p) not in datos['reales']])
+        m2_aseg = sum([datos['reales'][str(p)] for p in r2.get('starters', []) if str(p) in datos['reales']])
+        m2_rest = sum([datos['proy'].get(str(p), 0.0) for p in r2.get('starters', []) if str(p) not in datos['reales']])
+
+        p_base, p_live, d_match = calcular_drift_probabilidad(
+            r1.get('starters', []), r2.get('starters', []), datos['players_db'], datos['proy'], datos['reales'], 1500
+        )
+
+        with st.container():
+            col_eq1, col_vs, col_eq2 = st.columns([4, 2, 4])
+            with col_eq1:
+                st.markdown(f"### {m1}")
+                st.write(f"**Puntos Esperados:** {round(m1_aseg + m1_rest, 1)} pts *(Asegurados: {round(m1_aseg, 1)})*")
+                st.progress(min(1.0, max(0.0, p_live / 100.0)))
+                st.caption(f"Prob. Victoria: **{p_live}%**")
+
+            with col_vs:
+                st.markdown("<h3 style='text-align:center;'>VS</h3>", unsafe_allow_html=True)
+                drift_label = f"{'+' if d_match >= 0 else ''}{d_match}%"
+                st.metric("Shift en Vivo", drift_label, help="Movimiento de probabilidad respecto al pronóstico pre-game.")
+
+            with col_eq2:
+                st.markdown(f"### {m2}")
+                st.write(f"**Puntos Esperados:** {round(m2_aseg + m2_rest, 1)} pts *(Asegurados: {round(m2_aseg, 1)})*")
+                st.progress(min(1.0, max(0.0, (100.0 - p_live) / 100.0)))
+                st.caption(f"Prob. Victoria: **{round(100.0 - p_live, 1)}%**")
+
+            st.markdown("---")
