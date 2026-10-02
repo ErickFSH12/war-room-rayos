@@ -543,3 +543,28 @@ def render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map):
         with st.spinner("Conectando con la IA... analizando vectores de probabilidad y aislando Agentes Libres..."):
             resolucion = llamar_gemini(prompt)
             st.info(resolucion)
+def render_tab_noticias(datos):
+    st.header("📰 Central de Noticias (ESPN & Yahoo)")
+    st.write("Escaneando la red en tiempo real. Solo mostramos noticias de jugadores que pertenecen a equipos de nuestra liga.")
+    
+    # Juntar a todos los jugadores drafteados
+    nombres_roster = []
+    for r in datos['rosters']:
+        for pid in r.get('players', []):
+            p = datos['players_db'].get(str(pid), {})
+            if p.get('position') in ['QB', 'RB', 'WR', 'TE']:
+                nom = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
+                if nom: nombres_roster.append(nom)
+                
+    with st.spinner("Interceptando feeds de noticias (RSS)..."):
+        noticias = obtener_noticias_nfl(nombres_roster)
+        
+    if noticias:
+        for n in noticias:
+            st.info(f"🏈 **Jugadores implicados:** {', '.join(n['jugadores'])}")
+            st.markdown(f"#### [{n['titulo']}]({n['link']})")
+            # Mostrar la descripción limpiando HTML residual si lo hubiera
+            st.write(n['desc'][:300] + "..." if len(n['desc']) > 300 else n['desc'])
+            st.divider()
+    else:
+        st.success("Sin alertas críticas ni noticias de última hora en este momento para los jugadores de la liga.")
