@@ -3,7 +3,7 @@ import requests
 import numpy as np
 import pandas as pd
 from google import genai
-import empaquetar_estado_liga_para_gemini
+
 # --- CONSTANTES GLOBALES ---
 API_GEMINI = st.secrets["GEMINI_API_KEY"] if "GEMINI_API_KEY" in st.secrets else ""
 SLEEPER_USERNAME = "ericks1207"
