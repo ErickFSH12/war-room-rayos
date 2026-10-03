@@ -102,14 +102,98 @@ def render_tab_roster(datos, mi_roster, riv_start, riv_nom):
         st.pyplot(fig_rad)
 
 def render_tab_tracker(datos, u_map):
-    st.header("Marcador Global de la Liga")
+    st.header("📊 Tracker Liga: Enfrentamientos y Análisis de Rosters")
+    st.write("Monitorea la carrera de puntos global y despliega cada enfrentamiento para analizar titulares vs bancas en busca de trades.")
+    
+    # 1. GRÁFICA GLOBAL DE PUNTOS
     datos_barras = []
     for r in datos['rosters']:
         mgr = u_map.get(r['owner_id'], 'Eq')
         for pid in r.get('starters', []):
             pts = datos['reales'].get(str(pid), 0.0)
             nom = datos['players_db'].get(str(pid), {}).get('last_name', str(pid))
-            datos_barras.append({"Manager": mgr, "Jugador": nom, "Puntos": pts})
+            if pts > 0:
+                datos_barras.append({"Manager": mgr, "Jugador": nom, "Puntos": pts})
+                
+    if datos_barras:
+        df_barras = pd.DataFrame(datos_barras)
+        orden = df_barras.groupby("Manager")["Puntos"].sum().sort_values(ascending=True).index
+        fig_bar = px.bar(
+            df_barras, x="Puntos", y="Manager", color="Jugador", 
+            orientation='h', category_orders={"Manager": orden},
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        fig_bar.update_layout(height=400, showlegend=False, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    st.divider()
+
+    # 2. MATCHUPS: TITULARES Y BANCAS (SIDE-BY-SIDE)
+    st.subheader("⚔️ Duelos de la Semana y Profundidad de Roster")
+    st.write("Abre cada enfrentamiento para ver qué jugadores están escondiendo en sus bancas.")
+    
+    m_agr = {}
+    for m in datos['matchups']: 
+        m_agr.setdefault(m.get('matchup_id'), []).append(m)
+        
+    for m_id, eqs in m_agr.items():
+        if len(eqs) != 2: continue
+        
+        # Obtener los datos de los dos rosters enfrentados
+        r1 = next(r for r in datos['rosters'] if r.get('roster_id') == eqs[0].get('roster_id'))
+        r2 = next(r for r in datos['rosters'] if r.get('roster_id') == eqs[1].get('roster_id'))
+        
+        m1_name = u_map.get(r1.get('owner_id'), "Equipo 1")
+        m2_name = u_map.get(r2.get('owner_id'), "Equipo 2")
+        
+        with st.expander(f"🏈 {m1_name} vs {m2_name}", expanded=False):
+            col1, col2 = st.columns(2)
+            
+            def crear_tablas_equipo(roster_data):
+                titulares, banca = [], []
+                starters_ids = roster_data.get('starters', [])
+                all_ids = roster_data.get('players', [])
+                banca_ids = [p for p in all_ids if p not in starters_ids]
+                
+                # Procesar Titulares
+                for pid in starters_ids:
+                    if str(pid) == "0": continue # Slot vacío
+                    p = datos['players_db'].get(str(pid), {})
+                    nom = f"{p.get('first_name','')} {p.get('last_name','')}".strip()
+                    pos = p.get('position', 'FLEX')
+                    pts_real = datos['reales'].get(str(pid))
+                    pts_proy = round(datos['proy'].get(str(pid), 0.0), 1)
+                    estado = f"{pts_real} (Fin)" if pts_real is not None else f"{pts_proy} (Proy)"
+                    titulares.append({"Pos": pos, "Jugador": nom, "Pts": estado})
+                    
+                # Procesar Banca
+                for pid in banca_ids:
+                    p = datos['players_db'].get(str(pid), {})
+                    nom = f"{p.get('first_name','')} {p.get('last_name','')}".strip()
+                    pos = p.get('position', 'FLEX')
+                    proy = round(datos['proy'].get(str(pid), 0.0), 1)
+                    inj = p.get('injury_status')
+                    salud = f"🏥 {inj}" if inj in ['Out', 'IR', 'Questionable', 'Doubtful'] else "✅"
+                    banca.append({"Pos": pos, "Jugador": nom, "Proy": proy, "Salud": salud})
+                    
+                return pd.DataFrame(titulares), pd.DataFrame(banca)
+
+            df_t1, df_b1 = crear_tablas_equipo(r1)
+            df_t2, df_b2 = crear_tablas_equipo(r2)
+            
+            with col1:
+                st.markdown(f"<h4 style='color: {COLOR_MIO};'>{m1_name}</h4>", unsafe_allow_html=True)
+                st.markdown("**🛡️ TITULARES**")
+                st.dataframe(df_t1, hide_index=True, use_container_width=True)
+                st.markdown("**🪑 BANCA (Oportunidad de Trade)**")
+                st.dataframe(df_b1, hide_index=True, use_container_width=True)
+                
+            with col2:
+                st.markdown(f"<h4 style='color: {COLOR_RIV};'>{m2_name}</h4>", unsafe_allow_html=True)
+                st.markdown("**🛡️ TITULARES**")
+                st.dataframe(df_t2, hide_index=True, use_container_width=True)
+                st.markdown("**🪑 BANCA (Oportunidad de Trade)**")
+                st.dataframe(df_b2, hide_index=True, use_container_width=True)
     
     if datos_barras:
         df_barras = pd.DataFrame(datos_barras)
