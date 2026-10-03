@@ -399,20 +399,110 @@ def render_tab_waivers(datos):
     st.subheader("📋 Base de Datos de Disponibles (Top 50)")
     st.dataframe(df_fa[['Jugador', 'Pos', 'Equipo', 'EV_adj', 'Proyección', 'Media (NFLVerse)', 'Salud']].head(50), hide_index=True, use_container_width=True)
 def render_tab_nflverse():
-    st.header("Data Científica (NFLVerse)")
+  
+    st.header("🏈 Análisis Científico: Sleeper vs NFLVerse")
+    st.write("Cruce telemétrico: Compara las proyecciones actuales de Sleeper contra el peso de la historia real (NFLVerse).")
+    
     df_nfl = cargar_nflverse()
-    if not df_nfl.empty:
-        st.dataframe(df_nfl[['player_name', 'recent_team', 'position', 'fantasy_points_ppr']].tail(50), use_container_width=True)
+    if df_nfl.empty:
+        st.warning("Base de datos NFLVerse descargándose o no disponible en este momento.")
+        return
         
-    st.subheader("Backtesting: Proyección vs Realidad")
-    np.random.seed(42)
-    proy_test = np.clip(np.random.normal(13.5, 4.5, 500), 5.0, 25.0)
-    reales_test = [max(0, np.random.normal(proy_test[i] + (2 - 2.5)*1.8, 6.0 - (2*0.8))) for i in range(500)]
-    fig_bk, ax_bk = plt.subplots(figsize=(6, 3))
-    ax_bk.scatter(proy_test, reales_test, alpha=0.4, color=COLOR_MIO)
-    ax_bk.plot([5, 25], [5, 25], color=COLOR_RIV, ls='--')
-    ax_bk.spines['top'].set_visible(False); ax_bk.spines['right'].set_visible(False)
-    st.pyplot(fig_bk)
+    # 1. Preparar listas de selección dinámicas
+    jugadores_opciones = []
+    equipos_opciones = set()
+    nom_a_id = {}
+    
+    for pid, p in datos['players_db'].items():
+        pos = p.get('position', '')
+        eq = p.get('team', '')
+        if eq and eq != 'FA':
+            equipos_opciones.add(eq)
+        
+        # Filtrar solo jugadores ofensivos relevantes (con proyección > 2 puntos)
+        if pos in ['QB', 'RB', 'WR', 'TE'] and p.get('status') != 'Inactive':
+            pr = datos['proy'].get(str(pid), 0.0)
+            if pr > 2.0: 
+                nom = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
+                jugadores_opciones.append(nom)
+                nom_a_id[nom] = pid
+                
+    jugadores_opciones = sorted(list(set(jugadores_opciones)))
+    equipos_opciones = sorted(list(equipos_opciones))
+    
+    # 2. Selectores en la UI
+    c1, c2 = st.columns(2)
+    with c1:
+        jug_sel = st.selectbox("🔍 Análisis por Jugador", jugadores_opciones, index=0)
+    with c2:
+        eq_sel = st.selectbox("🛡️ Análisis por Ofensiva (Equipo)", equipos_opciones, index=0)
+        
+    st.divider()
+    
+    # 3. PANELES DE ANÁLISIS
+    col_jug, col_eq = st.columns(2)
+    
+    # --- PANEL IZQUIERDO: JUGADOR ---
+    with col_jug:
+        st.subheader(f"👤 {jug_sel}")
+        pid = str(nom_a_id.get(jug_sel, ''))
+        
+        # Datos Sleeper actuales
+        proy_actual = round(datos['proy'].get(pid, 0.0), 1)
+        real_actual = datos['reales'].get(pid, None)
+        
+        # Datos NFLVerse históricos
+        col_name = 'player_display_name' if 'player_display_name' in df_nfl.columns else 'player_name'
+        df_j = df_nfl[df_nfl[col_name] == jug_sel]
+        
+        if not df_j.empty:
+            media_hist = round(df_j['fantasy_points_ppr'].mean(), 1)
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Media Histórica", f"{media_hist} pts")
+            m2.metric("Proy. Sleeper Hoy", f"{proy_actual} pts", delta=f"{round(proy_actual - media_hist, 1)} vs Hist", delta_color="normal")
+            
+            estado_real = f"{real_actual} pts" if real_actual is not None else "Pendiente"
+            m3.metric("Real de Hoy", estado_real)
+            
+            # Gráfica de consistencia
+            df_j_sort = df_j.sort_values(['season', 'week'])
+            df_j_sort['Semana'] = df_j_sort['season'].astype(str) + " W" + df_j_sort['week'].astype(str)
+            fig_j = px.line(df_j_sort, x='Semana', y='fantasy_points_ppr', title="Curva de Producción Histórica", markers=True, color_discrete_sequence=[COLOR_MIO])
+            fig_j.add_hline(y=proy_actual, line_dash="dot", line_color=COLOR_RIV, annotation_text="Expectativa Sleeper")
+            fig_j.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", xaxis_title="", yaxis_title="Puntos PPR")
+            st.plotly_chart(fig_j, use_container_width=True)
+        else:
+            st.warning(f"No hay registro histórico en NFLVerse para {jug_sel} (Novato o sin snaps previos).")
+            st.metric("Proyección Actual (Sleeper)", f"{proy_actual} pts")
+            
+    # --- PANEL DERECHO: EQUIPO ---
+    with col_eq:
+        st.subheader(f"🛡️ Ofensiva Global: {eq_sel}")
+        
+        # Acumular la proyección actual de todo el equipo según Sleeper
+        proy_eq = 0.0
+        for iter_pid, p in datos['players_db'].items():
+            if p.get('team') == eq_sel and p.get('position') in ['QB', 'RB', 'WR', 'TE']:
+                proy_eq += datos['proy'].get(str(iter_pid), 0.0)
+        
+        # Procesar histórica del equipo
+        df_eq = df_nfl[df_nfl['recent_team'] == eq_sel]
+        if not df_eq.empty:
+            df_eq_grp = df_eq.groupby(['season', 'week'])['fantasy_points_ppr'].sum().reset_index()
+            media_eq_hist = round(df_eq_grp['fantasy_points_ppr'].mean(), 1)
+            
+            em1, em2 = st.columns(2)
+            em1.metric("Media Histórica Puntos", f"{media_eq_hist} pts")
+            em2.metric("Proyección Acumulada", f"{round(proy_eq, 1)} pts", delta=f"{round(proy_eq - media_eq_hist, 1)} vs Hist")
+            
+            # Dona de Motores Ofensivos
+            top_cont = df_eq.groupby(col_name)['fantasy_points_ppr'].sum().sort_values(ascending=False).head(5).reset_index()
+            fig_pie = px.pie(top_cont, values='fantasy_points_ppr', names=col_name, title="Motores de la Ofensiva", hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
+            fig_pie.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+            st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.warning("Sin datos históricos para este equipo.")
 def render_tab_desempeno(datos, mi_roster):
     st.header("📈 Rendimiento de Jugadores (Sleeper + NFLVerse)")
     st.write("Cruce telemétrico de proyecciones en vivo y el historial científico de yardas y touchdowns.")
