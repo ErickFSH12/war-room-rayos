@@ -253,24 +253,99 @@ def render_tab_tracker(datos, u_map):
         st.plotly_chart(fig_bar, use_container_width=True)
 
 def render_tab_pronosticos(datos, u_map, mi_r_id):
-    st.header("Playoffs: Predicciones de Toda la Liga")
-    m_agr = {}
-    for m in datos['matchups']: m_agr.setdefault(m.get('matchup_id'), []).append(m)
+    st.header("🔮 Cartelera de Pronósticos (Simulación Monte Carlo)")
+    st.write("Análisis de probabilidad de victoria para cada duelo de la liga basándose en 2,000 iteraciones matemáticas por partido.")
     
-    cols_p = st.columns(len(m_agr) if len(m_agr) > 0 else 1)
-    idx = 0
-    for m_id, eqs in m_agr.items():
-        if len(eqs)!=2: continue
-        r1, r2 = next(r for r in datos['rosters'] if r.get('roster_id')==eqs[0].get('roster_id')), next(r for r in datos['rosters'] if r.get('roster_id')==eqs[1].get('roster_id'))
-        m1, m2 = u_map.get(r1.get('owner_id'),"Eq1"), u_map.get(r2.get('owner_id'),"Eq2")
-        p_win, _, s1, s2 = ejecutar_monte_carlo_dual(r1.get('starters',[]), r2.get('starters',[]), datos['players_db'], datos['proy'], datos['reales'], 1500)
+    # 1. BOTÓN DE NARRATIVA AI (LAS VEGAS STYLE)
+    st.markdown("### 🎙️ Análisis de la Jornada")
+    if st.button("Generar Previa de la Semana con Gemini"):
+        with st.spinner("Gemini analizando todos los matchups y probabilidades..."):
+            resumen_duelos = []
+            m_agr_ai = {}
+            for m in datos['matchups']: m_agr_ai.setdefault(m.get('matchup_id'), []).append(m)
+            
+            for m_id, eqs in m_agr_ai.items():
+                if len(eqs) != 2: continue
+                r1 = next(r for r in datos['rosters'] if r.get('roster_id') == eqs[0].get('roster_id'))
+                r2 = next(r for r in datos['rosters'] if r.get('roster_id') == eqs[1].get('roster_id'))
+                m1, m2 = u_map.get(r1.get('owner_id'),"Eq1"), u_map.get(r2.get('owner_id'),"Eq2")
+                p_win, _, _, _ = ejecutar_monte_carlo_dual(r1.get('starters',[]), r2.get('starters',[]), datos['players_db'], datos['proy'], datos['reales'], 1000)
+                resumen_duelos.append(f"{m1} ({p_win}%) vs {m2} ({round(100-p_win, 1)}%)")
+                
+            prompt = f"""
+            Eres el analista principal de apuestas de Las Vegas para mi liga de Fantasy Football. 
+            Aquí están las probabilidades matemáticas de victoria de los enfrentamientos de esta semana calculadas por mi algoritmo de Monte Carlo:
+            {', '.join(resumen_duelos)}.
+            
+            Escribe un artículo corto, emocionante y con humor (estilo NFL Network) de 3 párrafos:
+            1. Destaca el 'Juego de la Semana' (el más parejo).
+            2. Menciona la paliza más predecible.
+            3. Haz una alerta de posible 'Upset' (sorpresa).
+            Menciona a los equipos por su nombre.
+            """
+            st.info(llamar_gemini(prompt))
+            
+    st.divider()
+
+    # 2. CARTELERA DE MATCHUPS
+    m_agr = {}
+    for m in datos['matchups']: 
+        m_agr.setdefault(m.get('matchup_id'), []).append(m)
         
-        with cols_p[idx % len(cols_p)]:
-            st.markdown(f"**{m1[:10]}** ({p_win}%) vs **{m2[:10]}**")
-            fig_p, ax_p = plt.subplots(figsize=(3, 1.5))
-            ax_p.hist(s1, bins=30, alpha=0.6, color=COLOR_MIO); ax_p.hist(s2, bins=30, alpha=0.6, color=COLOR_RIV)
-            ax_p.axis('off'); st.pyplot(fig_p)
-        idx += 1
+    for m_id, eqs in m_agr.items():
+        if len(eqs) != 2: continue
+        
+        # Obtener rosters
+        r1 = next(r for r in datos['rosters'] if r.get('roster_id') == eqs[0].get('roster_id'))
+        r2 = next(r for r in datos['rosters'] if r.get('roster_id') == eqs[1].get('roster_id'))
+        
+        m1 = u_map.get(r1.get('owner_id'),"Equipo 1")
+        m2 = u_map.get(r2.get('owner_id'),"Equipo 2")
+        
+        # Calcular puntos base (reales + proyectados)
+        def calc_pts(starters):
+            return sum([datos['reales'].get(str(p), datos['proy'].get(str(p), 0.0)) for p in starters if str(p) != "0"])
+            
+        pts_m1 = round(calc_pts(r1.get('starters',[])), 1)
+        pts_m2 = round(calc_pts(r2.get('starters',[])), 1)
+        
+        # Ejecutar simulación pesada
+        p_win1, _, _, _ = ejecutar_monte_carlo_dual(r1.get('starters',[]), r2.get('starters',[]), datos['players_db'], datos['proy'], datos['reales'], 2000)
+        p_win2 = round(100.0 - p_win1, 1)
+        
+        # Definir Narrativa del Duelo
+        if p_win1 >= 75.0 or p_win2 >= 75.0:
+            tag, col_tag = "🚨 PALIZA INMINENTE", "red"
+        elif 40.0 <= p_win1 <= 60.0:
+            tag, col_tag = "🪙 MONEDA AL AIRE (Empate Técnico)", "orange"
+        else:
+            tag, col_tag = "⚖️ FAVORITO CLARO", "blue"
+            
+        with st.container():
+            st.markdown(f"**{tag}**")
+            c1, c2, c3 = st.columns([3, 2, 3])
+            
+            with c1:
+                # Si es tu equipo, ponerlo en color azul, sino gris
+                color1 = COLOR_MIO if r1.get('roster_id') == mi_r_id else "inherit"
+                st.markdown(f"<h3 style='text-align: right; color: {color1};'>{m1}</h3>", unsafe_allow_html=True)
+                st.markdown(f"<h1 style='text-align: right;'>{p_win1}%</h1>", unsafe_allow_html=True)
+                st.markdown(f"<p style='text-align: right; color: gray;'>Esperados: {pts_m1} pts</p>", unsafe_allow_html=True)
+                
+            with c2:
+                st.write("") # Espaciador
+                st.write("")
+                st.markdown("<h4 style='text-align: center; color: gray;'>VS</h4>", unsafe_allow_html=True)
+                # Barra de dominancia
+                st.progress(p_win1 / 100.0)
+                
+            with c3:
+                color2 = COLOR_MIO if r2.get('roster_id') == mi_r_id else "inherit"
+                st.markdown(f"<h3 style='text-align: left; color: {color2};'>{m2}</h3>", unsafe_allow_html=True)
+                st.markdown(f"<h1 style='text-align: left;'>{p_win2}%</h1>", unsafe_allow_html=True)
+                st.markdown(f"<p style='text-align: left; color: gray;'>Esperados: {pts_m2} pts</p>", unsafe_allow_html=True)
+                
+            st.markdown("---")
 
 def render_tab_forense(datos, u_map):
     st.header("🕵️‍♂️ Matriz de Sabotaje y Auditoría")
