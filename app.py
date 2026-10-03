@@ -18,7 +18,14 @@ from ui_tabs import (
     render_tab_noticias
 )
 
-st.title("⚡ WAR ROOM: Rayos de Jalisco")
+c_title, c_btn = st.columns([4, 1])
+with c_title:
+    st.title("⚡ WAR ROOM: Rayos de Jalisco")
+with c_btn:
+    st.write("") # Espaciado
+    if st.button("🔄 Sincronizar Sleeper"):
+        st.cache_data.clear() # Borra la memoria
+        st.rerun() # Recarga la app al instante
 
 datos = extraer_datos_sleeper(SLEEPER_USERNAME)
 
