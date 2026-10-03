@@ -20,6 +20,7 @@ from core_logic import (get_proy, optimizar_alineacion, ejecutar_monte_carlo_dua
                         obtener_noticias_nfl) # <-- NUEVO IMPORT
 COLOR_MIO = "#4A90E2"
 COLOR_RIV = "#E94B3C"
+import plotly.graph_objects as go
 
 def render_tab_live(datos, mi_roster, riv_start, riv_nom):
     st.header(f"Matchup Semana {datos['semana']}")
