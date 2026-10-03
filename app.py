@@ -59,7 +59,7 @@ if datos:
         with tabs[5]: render_tab_pronosticos(datos, u_map, mi_r_id)
         with tabs[6]: render_tab_forense(datos, u_map)
         with tabs[7]: render_tab_waivers(datos)
-        with tabs[8]: render_tab_nflverse()
+        with tabs[8]: render_tab_nflverse(datos)
         with tabs[9]: render_tab_heatmap(datos, u_map)
         with tabs[10]: render_tab_oraculo(datos, u_map)
         with tabs[11]: render_tab_trade_machine(datos, mi_roster, u_map)
