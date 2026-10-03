@@ -65,14 +65,16 @@ def render_tab_live(datos, mi_roster, riv_start, riv_nom):
         st.info(f"🎙️ {resumen_espn}")
 
 def render_tab_roster(datos, mi_roster, riv_start, riv_nom):
-    st.header("Auditoría de Equipo")
+    st.header("📋 Mi Roster y Auditoría Táctica")
+    
+    # --- 1. TABLAS ORIGINALES Y RADAR ---
     df_titulares = formatear_roster_df(mi_roster['starters'], datos['players_db'], datos['proy'], datos['reales'], "Titular")
     banca_ids = [p for p in mi_roster['players'] if p not in mi_roster['starters']]
     df_banca = formatear_roster_df(banca_ids, datos['players_db'], datos['proy'], datos['reales'], "Banca/IR")
     
     col_t1, col_t2 = st.columns([2, 1])
     with col_t1:
-        st.subheader("11 Inicial")
+        st.subheader("11 Inicial Actual")
         st.dataframe(df_titulares, use_container_width=True, hide_index=True)
         st.subheader("Profundidad (Banca)")
         st.dataframe(df_banca, use_container_width=True, hide_index=True)
@@ -89,18 +91,66 @@ def render_tab_roster(datos, mi_roster, riv_start, riv_nom):
                 elif pos in pts: pts[pos] += p
                 elif pos == 'FB': pts['RB'] += p
             return [pts[c] for c in cats]
-
         m_pts, r_pts = agrup(mi_roster['starters']), agrup(riv_start)
         m_pts += m_pts[:1]; r_pts += r_pts[:1]
         angs = [n / float(len(cats)) * 2 * math.pi for n in range(len(cats))] + [0]
         
         fig_rad, ax_rad = plt.subplots(figsize=(4, 4), subplot_kw=dict(polar=True))
-        ax_rad.plot(angs, m_pts, color=COLOR_MIO, lw=2, label='Rayos'); ax_rad.fill(angs, m_pts, COLOR_MIO, alpha=0.2)
-        ax_rad.plot(angs, r_pts, color=COLOR_RIV, lw=2, label=riv_nom); ax_rad.fill(angs, r_pts, COLOR_RIV, alpha=0.2)
+        ax_rad.plot(angs, m_pts, color=COLOR_MIO, lw=2); ax_rad.fill(angs, m_pts, COLOR_MIO, alpha=0.2)
+        ax_rad.plot(angs, r_pts, color=COLOR_RIV, lw=2); ax_rad.fill(angs, r_pts, COLOR_RIV, alpha=0.2)
         ax_rad.set_xticks(angs[:-1]); ax_rad.set_xticklabels(cats, size=10)
-        ax_rad.legend(loc='lower center', bbox_to_anchor=(0.5, -0.2))
         st.pyplot(fig_rad)
 
+    # --- 2. NUEVO: SIMULADOR DE ALINEACIÓN (WHAT IF?) ---
+    st.divider()
+    st.subheader("🧪 Simulador de Alineación (Monte Carlo)")
+    st.write("Sube jugadores de tu banca a la titularidad temporalmente para ver si las matemáticas mejoran tus probabilidades antes de hacerlo en Sleeper.")
+    
+    # Preparar el diccionario de opciones con proyecciones para que sea fácil elegir
+    opciones_jugadores = {}
+    for pid in mi_roster['players']:
+        p = datos['players_db'].get(str(pid), {})
+        proy = round(datos['proy'].get(str(pid), 0.0), 1)
+        nom = f"{p.get('last_name', str(pid))} ({p.get('position', 'FLEX')}) - {proy} pts"
+        opciones_jugadores[nom] = pid
+        
+    # Nombres de los titulares actuales (evitando slots vacíos "0")
+    titulares_actuales = []
+    for pid in mi_roster['starters']:
+        if str(pid) != "0" and pid in mi_roster['players']:
+            p = datos['players_db'].get(str(pid), {})
+            proy = round(datos['proy'].get(str(pid), 0.0), 1)
+            nom = f"{p.get('last_name', str(pid))} ({p.get('position', 'FLEX')}) - {proy} pts"
+            if nom in opciones_jugadores:
+                titulares_actuales.append(nom)
+
+    # Selector múltiple interactivo
+    nuevos_titulares = st.multiselect(
+        "Arma tu alineación simulada (Quita o agrega jugadores):",
+        options=list(opciones_jugadores.keys()),
+        default=titulares_actuales
+    )
+
+    if st.button("▶️ Simular Impacto de esta Alineación"):
+        ids_simulados = [opciones_jugadores[nom] for nom in nuevos_titulares]
+        
+        with st.spinner("Corriendo 5,000 iteraciones con tu nueva alineación vs el rival..."):
+            prob_base, _, _, _ = ejecutar_monte_carlo_dual(mi_roster['starters'], riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
+            prob_sim, _, sm, sr = ejecutar_monte_carlo_dual(ids_simulados, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
+            
+            delta = round(prob_sim - prob_base, 1)
+            
+            c_res1, c_res2, c_res3 = st.columns(3)
+            c_res1.metric("Probabilidad Original", f"{prob_base}%")
+            c_res2.metric("Probabilidad Simulada", f"{prob_sim}%")
+            c_res3.metric("Impacto del Cambio", f"{'+' if delta >= 0 else ''}{delta}%", delta=f"{delta}%", delta_color="normal")
+            
+            if delta > 0:
+                st.success("✅ **¡Mejora Matemática!** El motor de Monte Carlo confirma que esta alineación te da más ventajas. ¡Haz el cambio en Sleeper!")
+            elif delta < 0:
+                st.error("❌ **Riesgo Detectado:** Estás sacrificando probabilidad de victoria. La varianza de los jugadores elegidos te perjudica.")
+            else:
+                st.info("⚖️ **Impacto Marginal:** El cambio es estadísticamente irrelevante. Guíate por tu instinto.")
 def render_tab_tracker(datos, u_map):
     st.header("📊 Tracker Liga: Enfrentamientos y Análisis de Rosters")
     st.write("Monitorea la carrera de puntos global y despliega cada enfrentamiento para analizar titulares vs bancas en busca de trades.")
