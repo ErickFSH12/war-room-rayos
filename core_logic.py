@@ -58,8 +58,12 @@ def extraer_datos_sleeper(user):
 
 @st.cache_data(ttl=86400)
 def cargar_nflverse():
-    try: return pd.read_csv("https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats.csv", low_memory=False).query("season >= 2024").copy()
-    except: return pd.DataFrame()
+    try: 
+        # Modificamos el filtro de "2024" a "2022" para tener los últimos 4 años de historia
+        # sin saturar la memoria RAM del servidor gratuito de Streamlit.
+        return pd.read_csv("https://github.com/nflverse/nflverse-data/releases/download/player_stats/player_stats.csv", low_memory=False).query("season >= 2022").copy()
+    except: 
+        return pd.DataFrame()
 
 def ejecutar_monte_carlo_dual(m_ids, r_ids, players_db, proyecciones, reales, n_sims=5000):
     def simular(ids):
