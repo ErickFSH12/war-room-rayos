@@ -23,47 +23,103 @@ COLOR_RIV = "#E94B3C"
 import plotly.graph_objects as go
 
 def render_tab_live(datos, mi_roster, riv_start, riv_nom):
-    st.header(f"Matchup Semana {datos['semana']}")
-    
-    # NUEVO: GUÍA TÁCTICA EXPANDIBLE
-    with st.expander("📚 Guía Táctica: Qué investigar antes de un Trade o Waiver", expanded=False):
-        st.markdown("""
-        * **🏈 Quarterbacks (QB):** Busca *Rushing Upside* (puntos por acarreo = piso seguro) y volumen de pases. Evalúa su línea ofensiva y el calendario futuro (SOS). 
-        * **🏃 Running Backs (RB):** El volumen es rey. Analiza los *High-Value Touches* (oportunidades en zona roja y targets por pase). Huye de los "comités" de 3 corredores.
-        * **👐 Wide Receivers (WR):** Investiga el *Target Share* (>20% de pases a él), *Air Yards* (pases profundos = jugadas grandes) y los emparejamientos contra esquineros estrella. 
-        * **🧱 Tight Ends (TE):** Posición altamente volátil. Prioriza TE's que sean la 1ª o 2ª opción de pase en su equipo o que sean gigantes físicos dominantes en la Zona Roja.
-        * **🛡️ DEF / 🦵 K:** Haz *Streaming* (rótalos cada semana). Ataca ofensivas débiles, equipos que ceden muchas capturas (Sacks) o QBs novatos. Busca equipos favoritos que jueguen en casa.
-        """)
-        
+    # 1. Cálculos de Puntos y Probabilidades (Background)
     m_aseg = sum([datos['reales'][str(p)] for p in mi_roster['starters'] if str(p) in datos['reales']])
     m_rest = sum([datos['proy'].get(str(p), 0.0) for p in mi_roster['starters'] if str(p) not in datos['reales']])
     r_aseg = sum([datos['reales'][str(p)] for p in riv_start if str(p) in datos['reales']])
     r_rest = sum([datos['proy'].get(str(p), 0.0) for p in riv_start if str(p) not in datos['reales']])
     
-    c1, c2, c3 = st.columns(3)
-    c1.metric(label=f"{MI_EQUIPO_NOMBRE}", value=round(m_aseg + m_rest, 1), delta=f"{round(m_aseg,1)} asegurados")
-    c2.metric(label=f"{riv_nom}", value=round(r_aseg + r_rest, 1), delta=f"{round(r_aseg,1)} asegurados")
+    pts_mios = round(m_aseg + m_rest, 1)
+    pts_riv = round(r_aseg + r_rest, 1)
     
     opt_start, cambios = optimizar_alineacion(mi_roster['starters'], [p for p in mi_roster['players'] if p not in mi_roster['starters']], datos['players_db'], datos['proy'], datos['reales'])
-    prob, med, sm, sr = ejecutar_monte_carlo_dual(opt_start, riv_start, datos['players_db'], datos['proy'], datos['reales'])
-    c3.metric(label="Win Probability (Monte Carlo)", value=f"{prob}%")
+    prob, med, sm, sr = ejecutar_monte_carlo_dual(opt_start, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
+
+    # 2. BANNER HERO GIGANTE
+    st.markdown(f"<h1 style='text-align: center; color: white; background-color: #111111; padding: 20px; border-radius: 10px; border: 2px solid {COLOR_MIO};'>🔥 GAMEDAY WARS: SEMANA {datos['semana']} 🔥</h1>", unsafe_allow_html=True)
+    st.write("")
+    
+    # 3. SCOREBOARD Y TACÓMETRO (GAUGE CHART)
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c1:
+        st.markdown(f"<h3 style='text-align: center; color: {COLOR_MIO}; margin-bottom: 0px;'>{MI_EQUIPO_NOMBRE}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h1 style='text-align: center; font-size: 70px; margin-top: 0px;'>{pts_mios}</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; color: gray;'>Asegurados: {round(m_aseg, 1)} pts</p>", unsafe_allow_html=True)
+        
+    with c2:
+        # Tacómetro de Probabilidad de Victoria
+        fig_gauge = go.Figure(go.Indicator(
+            mode = "gauge+number+delta",
+            value = prob,
+            delta = {'reference': 50, 'position': "top", 'increasing': {'color': "green"}, 'decreasing': {'color': "red"}},
+            title = {'text': "⚡ PROBABILIDAD DE VICTORIA ⚡", 'font': {'size': 20, 'color': "gray"}},
+            gauge = {
+                'axis': {'range': [0, 100], 'tickwidth': 2, 'tickcolor': "white"},
+                'bar': {'color': COLOR_MIO},
+                'bgcolor': "rgba(0,0,0,0.1)",
+                'borderwidth': 2,
+                'bordercolor': "gray",
+                'steps': [
+                    {'range': [0, 45], 'color': "rgba(233, 75, 60, 0.4)"},
+                    {'range': [45, 55], 'color': "rgba(255, 204, 0, 0.4)"},
+                    {'range': [55, 100], 'color': "rgba(74, 144, 226, 0.4)"}],
+                'threshold': {'line': {'color': "white", 'width': 4}, 'thickness': 0.75, 'value': prob}
+            }
+        ))
+        fig_gauge.update_layout(height=350, margin=dict(l=20, r=20, t=50, b=10), plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig_gauge, use_container_width=True)
+
+    with c3:
+        st.markdown(f"<h3 style='text-align: center; color: {COLOR_RIV}; margin-bottom: 0px;'>{riv_nom}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h1 style='text-align: center; font-size: 70px; margin-top: 0px;'>{pts_riv}</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; color: gray;'>Asegurados: {round(r_aseg, 1)} pts</p>", unsafe_allow_html=True)
 
     st.divider()
-    col_mc, col_espn = st.columns([1, 1])
+
+    # 4. ZONA INTERACTIVA: MONTE CARLO Y REPORTES DE IA
+    col_mc, col_ai = st.columns([3, 2])
+    
     with col_mc:
-        st.subheader("Curva de Probabilidad")
-        fig_mc, ax_mc = plt.subplots(figsize=(5, 3))
-        ax_mc.hist(sm, bins=40, alpha=0.7, color=COLOR_MIO, label='Rayos', density=True)
-        ax_mc.hist(sr, bins=40, alpha=0.7, color=COLOR_RIV, label='Rival', density=True)
-        ax_mc.spines['top'].set_visible(False); ax_mc.spines['right'].set_visible(False)
-        ax_mc.legend(); st.pyplot(fig_mc)
+        st.markdown("### 🧬 Simulación de Escenarios (Interactivo)")
+        st.caption("Pasa el ratón sobre las curvas para ver la frecuencia exacta de puntos calculada por el motor.")
         
-    with col_espn:
-        st.subheader("Reporte Táctico")
-        if cambios: st.warning("\n".join(cambios))
-        else: st.success("Alineación Blindada Óptima. No mover.")
-        resumen_espn = llamar_gemini(f"Comentarista ESPN. Rayos vs {riv_nom}. Probabilidad {prob}%. Resume en 2 párrafos cortos.")
-        st.info(f"🎙️ {resumen_espn}")
+        # Gráfica interactiva superpuesta (Overlap)
+        fig_mc = go.Figure()
+        fig_mc.add_trace(go.Histogram(x=sm, name='Rayos', marker_color=COLOR_MIO, opacity=0.75, nbinsx=45))
+        fig_mc.add_trace(go.Histogram(x=sr, name=riv_nom, marker_color=COLOR_RIV, opacity=0.75, nbinsx=45))
+        fig_mc.update_layout(
+            barmode='overlay', 
+            xaxis_title_text="Puntos Finales",
+            yaxis_title_text="Frecuencia (2,000 sims)",
+            plot_bgcolor="rgba(0,0,0,0)", 
+            paper_bgcolor="rgba(0,0,0,0)",
+            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
+            margin=dict(t=10)
+        )
+        st.plotly_chart(fig_mc, use_container_width=True)
+
+    with col_ai:
+        st.markdown("### 📡 Central Táctica")
+        
+        if cambios: 
+            st.error("⚠️ **¡ALERTA DE ALINEACIÓN!**")
+            for c in cambios: st.warning(c)
+        else: 
+            st.success("✅ **Sistemas Óptimos:** Tu alineación no tiene fugas de puntos esperados.")
+            
+        st.markdown("#### 🎙️ Narrador IA")
+        if st.button("Generar Comentario En Vivo (Gemini)"):
+            with st.spinner("Gemini analizando la tensión del partido..."):
+                resumen_espn = llamar_gemini(f"Eres el presentador estrella de NFL RedZone. Matchup en vivo: Rayos ({pts_mios} pts proyectados) vs {riv_nom} ({pts_riv} pts). Probabilidad de victoria: {prob}%. Haz un comentario en vivo MUY emocionante, intenso y estilo play-by-play sobre cómo se ve este duelo. Máximo 2 párrafos cortos.")
+                st.info(f"🎙️ {resumen_espn}")
+                
+        # 5. BONUS: HYPE VIDEO / REDZONE STREAMING
+        st.markdown("#### 📺 Hype Cam")
+        with st.expander("Abrir Pantalla", expanded=False):
+            st.write("Motivación para aplastar a la liga.")
+            # Puedes reemplazar este link de youtube por cualquier highlight de la NFL que te guste
+            st.video("https://www.youtube.com/watch?v=s5RzL57cibM") 
+            st.caption("Ajusta el volumen y prepárate para el domingo.")
 
 def render_tab_roster(datos, mi_roster, riv_start, riv_nom):
     st.header("📋 Mi Roster y Auditoría Táctica")
