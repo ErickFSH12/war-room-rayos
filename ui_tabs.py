@@ -398,7 +398,7 @@ def render_tab_waivers(datos):
     st.divider()
     st.subheader("📋 Base de Datos de Disponibles (Top 50)")
     st.dataframe(df_fa[['Jugador', 'Pos', 'Equipo', 'EV_adj', 'Proyección', 'Media (NFLVerse)', 'Salud']].head(50), hide_index=True, use_container_width=True)
-def render_tab_nflverse():
+def render_tab_nflverse(datos):
   
     st.header("🏈 Análisis Científico: Sleeper vs NFLVerse")
     st.write("Cruce telemétrico: Compara las proyecciones actuales de Sleeper contra el peso de la historia real (NFLVerse).")
