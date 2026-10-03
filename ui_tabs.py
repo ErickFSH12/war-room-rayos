@@ -273,32 +273,86 @@ def render_tab_pronosticos(datos, u_map, mi_r_id):
         idx += 1
 
 def render_tab_forense(datos, u_map):
-    st.header("Matriz de Sabotaje y Auditoría")
-    cnt = {r.get('roster_id'): {'adds':0, 'faab':0, 'trades': 0} for r in datos['rosters']}
-    for t in datos['trades']:
-        for rid in t.get('roster_ids', []):
-            if rid in cnt: cnt[rid]['trades'] += 1
+    st.header("🕵️‍♂️ Matriz de Sabotaje y Auditoría")
+    st.write("Rastrea los movimientos de la liga (Trades, Waivers, FAAB) e identifica drops desesperados.")
     
+    # 1. Inicializar contadores por equipo
+    cnt = {r.get('roster_id'): {'adds': 0, 'faab': 0, 'trades': 0} for r in datos.get('rosters', [])}
+    
+    # 2. Procesar Trades de forma segura
+    for t in datos.get('trades', []):
+        for rid in t.get('roster_ids', []):
+            if rid in cnt: 
+                cnt[rid]['trades'] += 1
+                
+    # 3. Procesar Waivers y Panic Drops
     drops_p = []
-    for w in datos['waivers']:
-        rid = w.get('creator') or (w.get('roster_ids',[None])[0] if w.get('roster_ids') else None)
+    for w in datos.get('waivers', []):
+        # Identificar quién hizo el waiver de forma segura
+        rid = w.get('creator') 
+        if not rid and w.get('roster_ids'):
+            rid = w.get('roster_ids')[0]
+            
         if rid in cnt:
-            cnt[rid]['adds'] += 1; cnt[rid]['faab'] += w.get('settings',{}).get('waiver_bid',0)
-        for pid, rd in (w.get('drops') or {}).items():
-            pr = get_proy(str(pid), datos['players_db'].get(str(pid),{}).get('position'), datos['proy'])
-            if pr > 10.5: drops_p.append(f"{datos['players_db'].get(str(pid),{}).get('last_name')} (Drop de {u_map.get(next((r.get('owner_id') for r in datos['rosters'] if r.get('roster_id')==rd),'Eq'))})")
+            cnt[rid]['adds'] += 1
+            # Evitar error si 'settings' es None
+            settings = w.get('settings') or {}
+            faab_spent = settings.get('waiver_bid', 0)
+            if faab_spent:
+                cnt[rid]['faab'] += faab_spent
+                
+        # Evaluar "Panic Drops" (jugadores botados)
+        drops = w.get('drops') or {}
+        for pid, roster_id_drop in drops.items():
+            p_data = datos['players_db'].get(str(pid), {})
+            pos = p_data.get('position', 'N/A')
+            
+            # Checar proyección del jugador dropeado
+            pr = round(datos['proy'].get(str(pid), 0.0), 1)
+            
+            # Si alguien botó a un jugador con buena proyección (>= 8 pts)
+            if pr >= 8.0:
+                mgr_drop = "Desconocido"
+                for r in datos.get('rosters', []):
+                    if r.get('roster_id') == roster_id_drop:
+                        mgr_drop = u_map.get(r.get('owner_id'), "Eq")
+                        break
+                        
+                nom_jugador = f"{p_data.get('first_name', '')} {p_data.get('last_name', '')}".strip()
+                drops_p.append(f"🚨 **{mgr_drop}** soltó a **{nom_jugador}** ({pos} - Proy: {pr} pts)")
 
+    # 4. Renderizado Visual
     c_f1, c_f2 = st.columns(2)
+    
     with c_f1:
-        st.subheader("Gatillo Fácil (Liga)")
-        rk = sorted(cnt.items(), key=lambda x: x[1]['adds'] + x[1]['trades'], reverse=True)
-        df_act = pd.DataFrame([{"Manager": u_map.get(next((r.get('owner_id') for r in datos['rosters'] if r.get('roster_id')==rid),'Eq')), "Trades": d['trades'], "Waivers": d['adds'], "FAAB": f"${d['faab']}"} for rid, d in rk])
+        st.subheader("🔫 Gatillo Fácil (Actividad)")
+        # Extracción segura de nombres de managers
+        actividad = []
+        for rid, d in cnt.items():
+            mgr_name = "Manager Desconocido"
+            for r in datos.get('rosters', []):
+                if r.get('roster_id') == rid:
+                    mgr_name = u_map.get(r.get('owner_id'), "Eq")
+                    break
+            actividad.append({
+                "Manager": mgr_name, 
+                "Trades": d['trades'], 
+                "Waivers": d['adds'], 
+                "FAAB Gastado": f"${d['faab']}"
+            })
+        
+        # Ordenar a los managers más movidos hasta arriba
+        df_act = pd.DataFrame(actividad).sort_values(by=["Trades", "Waivers"], ascending=[False, False])
         st.dataframe(df_act, hide_index=True, use_container_width=True)
+        
     with c_f2:
-        st.subheader("Panic Drops")
+        st.subheader("😱 Panic Drops")
+        st.write("Jugadores valiosos que fueron tirados a la basura recientemente:")
         if drops_p:
-            for d in drops_p[-5:]: st.error(d)
-        else: st.write("Sin Panic Drops recientes.")
+            for d in drops_p: 
+                st.error(d)
+        else: 
+            st.success("Nadie ha entrado en pánico botando jugadores valiosos aún.")
 
 def render_tab_waivers(datos):
     st.header("🦅 Agencia Libre Dinámica (Waivers + NFLVerse)")
@@ -435,6 +489,7 @@ def render_tab_desempeno(datos, mi_roster):
             st.warning("⚠️ No se cruzaron datos exactos con NFLVerse. Esto puede pasar con jugadores novatos, defensas (DEF) o sufijos como 'Jr.' y 'III'.")
     else:
         st.error("No se pudo cargar la base de NFLVerse.")
+
 def render_tab_side_by_side(datos, mi_roster, riv_start, riv_nom, mi_r_id, u_map):
     st.header("⚖️ Análisis Side-by-Side en Tiempo Real")
     st.write("Tracking de enfrentamiento directo y desviación en vivo respecto al pronóstico original.")
