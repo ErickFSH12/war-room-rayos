@@ -514,22 +514,20 @@ def render_tab_desempeno(datos, mi_roster):
         df_mis = df_nfl[df_nfl[col_name].isin(mis_jugadores)].copy()
         
         if not df_mis.empty:
-            # Agrupar los datos por jugador y temporada
             df_temporada = df_mis.groupby([col_name, 'season'])[['fantasy_points_ppr', 'passing_yards', 'rushing_yards', 'receiving_yards']].sum().reset_index()
             
-            # Obtener lista de jugadores que sí tienen historial
             jugadores_con_datos = df_temporada[col_name].unique()
             
-            # Crear una cuadrícula de 2 columnas para no hacer la página infinita
+            # Cuadrícula de 2 columnas
             cols = st.columns(2)
             
             for i, jugador in enumerate(jugadores_con_datos):
                 df_jugador = df_temporada[df_temporada[col_name] == jugador]
                 
-                with cols[i % 2]: # Alternar entre la columna izquierda y derecha
+                with cols[i % 2]:
                     st.subheader(f"🏈 {jugador}")
                     
-                    # Crear gráfica individual
+                    # Gráfica individual
                     fig = px.bar(
                         df_jugador, 
                         x="season", 
@@ -537,8 +535,6 @@ def render_tab_desempeno(datos, mi_roster):
                         text_auto=".1f",
                         color_discrete_sequence=[COLOR_MIO]
                     )
-                    
-                    # Formatear la gráfica para que los años se vean bien (ej. 2024 en vez de 2,024)
                     fig.update_xaxes(type='category', title="")
                     fig.update_yaxes(title="Puntos PPR")
                     fig.update_layout(
@@ -549,7 +545,7 @@ def render_tab_desempeno(datos, mi_roster):
                     )
                     st.plotly_chart(fig, use_container_width=True)
                     
-                    # Crear una tablita resumen individual limpia
+                    # Tabla resumen individual
                     df_tabla = df_jugador.rename(columns={
                         "season": "Temp", 
                         "fantasy_points_ppr": "Pts PPR", 
@@ -562,7 +558,7 @@ def render_tab_desempeno(datos, mi_roster):
                     st.divider()
         else:
             st.info("No se encontraron datos históricos para los jugadores de tu roster (pueden ser novatos o no han jugado snaps aún).")
-
+          
 def render_tab_side_by_side(datos, mi_roster, riv_start, riv_nom, mi_r_id, u_map):
     st.header("⚖️ Análisis Side-by-Side en Tiempo Real")
     st.write("Tracking de enfrentamiento directo y desviación en vivo respecto al pronóstico original.")
