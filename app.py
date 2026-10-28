@@ -8,24 +8,19 @@ sns.set_theme(style="whitegrid", palette="pastel")
 
 from core_logic import extraer_datos_sleeper, SLEEPER_USERNAME, MI_EQUIPO_NOMBRE
 
-# Módulo 1
-from ui_matchup import (
-    render_tab_live, render_tab_side_by_side, render_tab_tracker, 
-    render_tab_pronosticos, render_tab_vegas_odds
-)
+# --- MÓDULO 1: MATCHUP ---
+from ui_matchup import render_tab_live, render_tab_side_by_side, render_tab_tracker, render_tab_pronosticos, render_tab_vegas_odds
 
-# Módulo 2
+# --- MÓDULO 2: SCOUTING ---
 from ui_scouting import render_tab_scouting
 
-# Módulo Temporal (hasta que terminemos de migrar)
-from ui_tabs import (
-    render_tab_forense, render_tab_waivers, render_tab_nflverse, 
-    render_tab_heatmap, render_tab_oraculo, render_tab_trade_machine, 
-    render_tab_lesiones, render_tab_mastermind, render_tab_noticias
-)
+# --- MÓDULO TEMPORAL: TABS RESTANTES ---
+from ui_tabs import render_tab_forense, render_tab_waivers, render_tab_nflverse, render_tab_heatmap, render_tab_oraculo, render_tab_trade_machine, render_tab_lesiones, render_tab_mastermind, render_tab_noticias
 
+# --- UI PRINCIPAL ---
 c_title, c_btn = st.columns([4, 1])
-with c_title: st.title("⚡ WAR ROOM: Rayos de Jalisco")
+with c_title: 
+    st.title("⚡ WAR ROOM: Rayos de Jalisco")
 with c_btn:
     st.write("") 
     if st.button("🔄 Sincronizar Sleeper"):
