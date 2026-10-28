@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from core_logic import (
     ejecutar_monte_carlo_dual, optimizar_alineacion, llamar_gemini, 
     calcular_drift_probabilidad, generar_comparativa_side_by_side, 
-    generar_game_scripts, MI_EQUIPO_NOMBRE
+    MI_EQUIPO_NOMBRE
 )
 
 COLOR_MIO = "#4A90E2"
@@ -97,29 +97,23 @@ def render_tab_side_by_side(datos, mi_roster, riv_start, riv_nom, mi_r_id, u_map
     df_sbs = generar_comparativa_side_by_side(mi_roster['starters'], riv_start, datos['players_db'], datos['proy'], datos['reales'])
     st.dataframe(df_sbs, hide_index=True, use_container_width=True)
 
-def render_tab_tracker(datos, u_map):
-    st.header("📊 Tracker Liga: Enfrentamientos y Análisis de Rosters")
+
+# --- LA NUEVA PESTAÑA FUSIONADA ---
+def render_tab_tracker_y_predicciones(datos, u_map, mi_r_id):
+    st.header("📊 Tracker Global & Predicciones de la Liga")
+    
+    # 1. SCOREBOARD DE LA LIGA
     datos_barras = [{"Manager": u_map.get(r['owner_id'], 'Eq'), "Jugador": datos['players_db'].get(str(pid), {}).get('last_name', str(pid)), "Puntos": datos['reales'].get(str(pid), 0.0)} for r in datos['rosters'] for pid in r.get('starters', []) if datos['reales'].get(str(pid), 0.0) > 0]
     if datos_barras:
         df_barras = pd.DataFrame(datos_barras)
         fig_bar = px.bar(df_barras, x="Puntos", y="Manager", color="Jugador", orientation='h', category_orders={"Manager": df_barras.groupby("Manager")["Puntos"].sum().sort_values().index}, color_discrete_sequence=px.colors.qualitative.Pastel)
-        fig_bar.update_layout(height=400, showlegend=False, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)")
+        fig_bar.update_layout(height=400, showlegend=False, plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=0))
         st.plotly_chart(fig_bar, use_container_width=True)
 
     st.divider()
-    st.subheader("⚔️ Duelos de la Semana")
-    m_agr = {}
-    for m in datos['matchups']: m_agr.setdefault(m.get('matchup_id'), []).append(m)
-    for m_id, eqs in m_agr.items():
-        if len(eqs) != 2: continue
-        r1 = next(r for r in datos['rosters'] if r.get('roster_id') == eqs[0].get('roster_id'))
-        r2 = next(r for r in datos['rosters'] if r.get('roster_id') == eqs[1].get('roster_id'))
-        
-        with st.expander(f"🏈 {u_map.get(r1.get('owner_id'), 'Eq1')} vs {u_map.get(r2.get('owner_id'), 'Eq2')}", expanded=False):
-            st.info("Desarrollo en progreso para optimizar vista.")
-
-def render_tab_pronosticos(datos, u_map, mi_r_id):
-    st.header("🔮 Cartelera de Pronósticos (Monte Carlo)")
+    
+    # 2. PREDICCIONES Y NARRATIVA
+    st.subheader("🔮 Cartelera de Enfrentamientos")
     if st.button("🎙️ Generar Previa de la Semana con Gemini"):
         resumen_duelos = []
         m_agr_ai = {}
@@ -131,24 +125,68 @@ def render_tab_pronosticos(datos, u_map, mi_r_id):
                 resumen_duelos.append(f"{u_map.get(r1.get('owner_id'))} ({p_w}%) vs {u_map.get(r2.get('owner_id'))} ({round(100-p_w, 1)}%)")
         with st.spinner("Analizando..."): st.info(llamar_gemini(f"Eres experto NFL. Probabilidades: {', '.join(resumen_duelos)}. Haz un artículo corto (Juego de semana, paliza, upset)."))
     
-    st.divider()
+    # 3. MEGA-CARTELERA (PROBABILIDAD + ROSTERS)
     m_agr = {}
     for m in datos['matchups']: m_agr.setdefault(m.get('matchup_id'), []).append(m)
     for m_id, eqs in m_agr.items():
         if len(eqs) != 2: continue
         r1, r2 = next(r for r in datos['rosters'] if r.get('roster_id') == eqs[0].get('roster_id')), next(r for r in datos['rosters'] if r.get('roster_id') == eqs[1].get('roster_id'))
+        m1_name, m2_name = u_map.get(r1.get('owner_id'), "Eq1"), u_map.get(r2.get('owner_id'), "Eq2")
+        
         p1, _, _, _ = ejecutar_monte_carlo_dual(r1.get('starters',[]), r2.get('starters',[]), datos['players_db'], datos['proy'], datos['reales'], 1500)
         p2 = round(100.0 - p1, 1)
-        tag = "🚨 PALIZA" if p1>=75 or p2>=75 else ("🪙 MONEDA AL AIRE" if 40<=p1<=60 else "⚖️ FAVORITO")
+        tag = "🚨 PALIZA INMINENTE" if p1>=75 or p2>=75 else ("🪙 MONEDA AL AIRE" if 40<=p1<=60 else "⚖️ FAVORITO CLARO")
         
-        st.markdown(f"**{tag}**")
+        st.markdown(f"<br>**{tag}**", unsafe_allow_html=True)
         c1, c2, c3 = st.columns([3, 2, 3])
-        c1.markdown(f"<h3 style='text-align: right;'>{u_map.get(r1.get('owner_id'))} - {p1}%</h3>", unsafe_allow_html=True)
+        
+        color1 = COLOR_MIO if r1.get('roster_id') == mi_r_id else "inherit"
+        color2 = COLOR_MIO if r2.get('roster_id') == mi_r_id else "inherit"
+        
+        c1.markdown(f"<h3 style='text-align: right; color: {color1};'>{m1_name} - {p1}%</h3>", unsafe_allow_html=True)
+        c2.write("")
         c2.progress(p1 / 100.0)
-        c3.markdown(f"<h3 style='text-align: left;'>{u_map.get(r2.get('owner_id'))} - {p2}%</h3>", unsafe_allow_html=True)
-        st.markdown("---")
+        c3.markdown(f"<h3 style='text-align: left; color: {color2};'>{m2_name} - {p2}%</h3>", unsafe_allow_html=True)
+        
+        # Desplegable combinado de Roster
+        with st.expander(f"👁️ Ver Alineaciones y Bancas: {m1_name} vs {m2_name}", expanded=False):
+            col_r1, col_r2 = st.columns(2)
+            
+            def crear_tablas_equipo(roster_data):
+                titulares, banca = [], []
+                starters_ids = roster_data.get('starters', [])
+                all_ids = roster_data.get('players', [])
+                banca_ids = [p for p in all_ids if p not in starters_ids]
+                for pid in starters_ids:
+                    if str(pid) == "0": continue
+                    p = datos['players_db'].get(str(pid), {})
+                    nom = f"{p.get('first_name','')} {p.get('last_name','')}".strip()
+                    pos = p.get('position', 'FLEX')
+                    pts_real = datos['reales'].get(str(pid))
+                    pts_proy = round(datos['proy'].get(str(pid), 0.0), 1)
+                    estado = f"{pts_real} (Fin)" if pts_real is not None else f"{pts_proy} (Proy)"
+                    titulares.append({"Pos": pos, "Jugador": nom, "Pts": estado})
+                for pid in banca_ids:
+                    p = datos['players_db'].get(str(pid), {})
+                    nom = f"{p.get('first_name','')} {p.get('last_name','')}".strip()
+                    pos = p.get('position', 'FLEX')
+                    proy = round(datos['proy'].get(str(pid), 0.0), 1)
+                    inj = p.get('injury_status')
+                    salud = f"🏥 {inj}" if inj in ['Out', 'IR', 'Questionable', 'Doubtful'] else "✅"
+                    banca.append({"Pos": pos, "Jugador": nom, "Proy": proy, "Salud": salud})
+                return pd.DataFrame(titulares), pd.DataFrame(banca)
 
-def render_tab_vegas_odds(datos):
-    st.header("🎲 Game Script & Vegas Odds")
-    df_vegas = generar_game_scripts(datos['players_db'], datos['proy'])
-    st.dataframe(df_vegas.head(12), hide_index=True, use_container_width=True)
+            df_t1, df_b1 = crear_tablas_equipo(r1)
+            df_t2, df_b2 = crear_tablas_equipo(r2)
+            
+            with col_r1:
+                st.markdown(f"**Titulares {m1_name}**")
+                st.dataframe(df_t1, hide_index=True, use_container_width=True)
+                st.markdown("**Banca**")
+                st.dataframe(df_b1, hide_index=True, use_container_width=True)
+            with col_r2:
+                st.markdown(f"**Titulares {m2_name}**")
+                st.dataframe(df_t2, hide_index=True, use_container_width=True)
+                st.markdown("**Banca**")
+                st.dataframe(df_b2, hide_index=True, use_container_width=True)
+        st.markdown("---")
