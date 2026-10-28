@@ -9,15 +9,22 @@ sns.set_theme(style="whitegrid", palette="pastel")
 
 # --- IMPORTAR MÓDULOS DE ARQUITECTURA ---
 from core_logic import extraer_datos_sleeper, SLEEPER_USERNAME, MI_EQUIPO_NOMBRE
-from ui_tabs import (
-    render_tab_live, render_tab_side_by_side, render_tab_roster, 
-    render_tab_desempeno, render_tab_tracker, render_tab_pronosticos, 
-    render_tab_forense, render_tab_waivers, render_tab_nflverse, 
-    render_tab_heatmap, render_tab_oraculo, render_tab_trade_machine, 
-    render_tab_lesiones, render_tab_vegas_odds, render_tab_mastermind,
-    render_tab_noticias
+
+# Módulo 1: Pestañas de Matchup (Nuevo Archivo)
+from ui_matchup import (
+    render_tab_live, render_tab_side_by_side, render_tab_tracker, 
+    render_tab_pronosticos, render_tab_vegas_odds
 )
 
+# Módulo 2: Resto de Pestañas
+from ui_tabs import (
+    render_tab_roster, render_tab_desempeno, render_tab_forense, 
+    render_tab_waivers, render_tab_nflverse, render_tab_heatmap, 
+    render_tab_oraculo, render_tab_trade_machine, render_tab_lesiones, 
+    render_tab_mastermind, render_tab_noticias
+)
+
+# --- ENCABEZADO CON BOTÓN DE SINCRONIZACIÓN ---
 c_title, c_btn = st.columns([4, 1])
 with c_title:
     st.title("⚡ WAR ROOM: Rayos de Jalisco")
@@ -44,7 +51,7 @@ if datos:
         tabs = st.tabs([
             "⚔️ Resumen Live", "⚖️ Side-by-Side", "📋 Mi Roster", 
             "📈 Histórico", "📊 Tracker Liga", "🔮 Predicciones", 
-            "🕵‍♂️️ Sabotaje", "🦅 Waivers", "🏈 NFLVerse", 
+            "🕵‍♂️ Sabotaje", "🦅 Waivers", "🏈 NFLVerse", 
             "🗺️ Heatmap", "🧠 Oráculo ROS", "🤝 Trade Machine", 
             "🚑 Lesiones", "🎲 Vegas Odds", "🤖 Mastermind", 
             "📰 Noticias Liga"
