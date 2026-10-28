@@ -13,7 +13,6 @@ COLOR_MIO = "#4A90E2"
 COLOR_RIV = "#E94B3C"
 
 def render_tab_live(datos, mi_roster, riv_start, riv_nom):
-    # (Toda tu lógica Live que hicimos hace un momento)
     m_aseg = sum([datos['reales'][str(p)] for p in mi_roster['starters'] if str(p) in datos['reales']])
     m_rest = sum([datos['proy'].get(str(p), 0.0) for p in mi_roster['starters'] if str(p) not in datos['reales']])
     r_aseg = sum([datos['reales'][str(p)] for p in riv_start if str(p) in datos['reales']])
