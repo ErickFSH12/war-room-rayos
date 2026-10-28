@@ -5,7 +5,7 @@ import plotly.express as px
 import math
 from core_logic import (
     get_proy, ejecutar_monte_carlo_dual, formatear_roster_df, 
-    cargar_nflverse
+    cargar_nflverse, optimizar_alineacion, llamar_gemini
 )
 
 COLOR_MIO = "#4A90E2"
@@ -50,31 +50,53 @@ def render_tab_scouting(datos, mi_roster, riv_start):
 
     st.divider()
 
-    # --- PARTE 2: SIMULADOR DE ALINEACIÓN ---
-    st.subheader("🧪 Simulador de Alineación (Monte Carlo)")
-    opciones_jugadores = {}
-    for pid in mi_roster['players']:
-        p = datos['players_db'].get(str(pid), {})
-        proy = round(datos['proy'].get(str(pid), 0.0), 1)
-        nom = f"{p.get('last_name', str(pid))} ({p.get('position', 'FLEX')}) - {proy} pts"
-        opciones_jugadores[nom] = pid
-        
-    titulares_actuales = [nom for nom, pid in opciones_jugadores.items() if pid in mi_roster['starters'] and str(pid) != "0"]
+    # --- PARTE 2: MASTERMIND AUTO-OPTIMIZADOR ---
+    st.subheader("🧠 Piloto Automático Mastermind (Monte Carlo)")
+    st.write("Deja que la IA escanee tu banca y encuentre la alineación matemáticamente perfecta.")
     
-    # Esta es la línea que se cortó en tu archivo
-    nuevos_titulares = st.multiselect("Arma tu alineación simulada:", options=list(opciones_jugadores.keys()), default=titulares_actuales)
+    col_btn, col_res = st.columns([1, 2])
+    
+    with col_btn:
+        st.info("El algoritmo iterará sobre todas las combinaciones posibles de tu roster actual.")
+        auto_simular = st.button("🚀 Ejecutar Optimización Máxima", use_container_width=True)
 
-    if st.button("▶️ Simular Impacto de Alineación"):
-        ids_simulados = [opciones_jugadores[nom] for nom in nuevos_titulares]
-        with st.spinner("Corriendo iteraciones..."):
-            prob_base, _, _, _ = ejecutar_monte_carlo_dual(mi_roster['starters'], riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
-            prob_sim, _, sm, sr = ejecutar_monte_carlo_dual(ids_simulados, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
-            delta = round(prob_sim - prob_base, 1)
-            
-            c_res1, c_res2, c_res3 = st.columns(3)
-            c_res1.metric("Probabilidad Original", f"{prob_base}%")
-            c_res2.metric("Probabilidad Simulada", f"{prob_sim}%")
-            c_res3.metric("Impacto del Cambio", f"{'+' if delta >= 0 else ''}{delta}%", delta=f"{delta}%", delta_color="normal")
+    with col_res:
+        if auto_simular:
+            with st.spinner("Mastermind calculando permutaciones de roster..."):
+                # 1. Encontrar la mejor alineación matemática
+                opt_start, cambios = optimizar_alineacion(mi_roster['starters'], banca_ids, datos['players_db'], datos['proy'], datos['reales'])
+                
+                if not cambios:
+                    st.success("✅ **Sistemas Óptimos:** Tu alineación actual es la mejor configuración matemática posible. No toques tu app de Sleeper.")
+                else:
+                    # 2. Correr Monte Carlo para medir el impacto real
+                    prob_base, _, _, _ = ejecutar_monte_carlo_dual(mi_roster['starters'], riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
+                    prob_sim, _, _, _ = ejecutar_monte_carlo_dual(opt_start, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
+                    delta = round(prob_sim - prob_base, 1)
+                    
+                    st.error("🚨 **Se encontraron fugas de probabilidad en tu alineación inicial.**")
+                    
+                    c_m1, c_m2, c_m3 = st.columns(3)
+                    c_m1.metric("Probabilidad Original", f"{prob_base}%")
+                    c_m2.metric("Nueva Probabilidad", f"{prob_sim}%")
+                    c_m3.metric("Impacto Neto", f"{'+' if delta >= 0 else ''}{delta}%", delta=f"{delta}%")
+                    
+                    # 3. Gemini redacta la orden de ejecución
+                    cambios_texto = "\n".join(cambios)
+                    prompt = f"""
+                    Soy el mánager de un equipo de Fantasy Football. 
+                    Mi motor matemático detectó que debo hacer estos cambios urgentes en mi alineación titular:
+                    {cambios_texto}
+                    
+                    Al hacer estos cambios, mi probabilidad de ganar sube {delta}%.
+                    Redacta una instrucción militar, corta y directa ordenándome que abra la app de Sleeper y haga estos cambios ahora mismo para asegurar la victoria. Máximo 3 líneas.
+                    """
+                    orden_ia = llamar_gemini(prompt)
+                    st.warning(f"🤖 **ORDEN DE EJECUCIÓN:** {orden_ia}")
+                    
+                    st.markdown("**👇 Cambios requeridos en Sleeper:**")
+                    for c in cambios:
+                        st.write(f"- {c}")
 
     st.divider()
 
