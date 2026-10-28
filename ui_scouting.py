@@ -77,26 +77,36 @@ def render_tab_scouting(datos, mi_roster, riv_start):
                     st.error("🚨 **Se encontraron fugas de probabilidad en tu alineación inicial.**")
                     
                     c_m1, c_m2, c_m3 = st.columns(3)
-                    c_m1.metric("Probabilidad Original", f"{prob_base}%")
-                    c_m2.metric("Nueva Probabilidad", f"{prob_sim}%")
-                    c_m3.metric("Impacto Neto", f"{'+' if delta >= 0 else ''}{delta}%", delta=f"{delta}%")
+                    c_m1.metric("Prob. Original", f"{prob_base}%")
+                    c_m2.metric("Prob. Optimizada", f"{prob_sim}%")
+                    c_m3.metric("Impacto Matemático", f"{'+' if delta >= 0 else ''}{delta}%", delta=f"{delta}%")
                     
-                    # 3. Gemini redacta la orden de ejecución
-                    cambios_texto = "\n".join(cambios)
-                    prompt = f"""
-                    Soy el mánager de un equipo de Fantasy Football. 
-                    Mi motor matemático detectó que debo hacer estos cambios urgentes en mi alineación titular:
-                    {cambios_texto}
-                    
-                    Al hacer estos cambios, mi probabilidad de ganar sube {delta}%.
-                    Redacta una instrucción militar, corta y directa ordenándome que abra la app de Sleeper y haga estos cambios ahora mismo para asegurar la victoria. Máximo 3 líneas.
-                    """
-                    orden_ia = llamar_gemini(prompt)
-                    st.warning(f"🤖 **ORDEN DE EJECUCIÓN:** {orden_ia}")
-                    
-                    st.markdown("**👇 Cambios requeridos en Sleeper:**")
+                    st.markdown("**👇 Rotaciones Detectadas:**")
                     for c in cambios:
                         st.write(f"- {c}")
+                        
+                    st.divider()
+                    
+                    # 3. Gemini redacta el Reporte Ejecutivo
+                    cambios_texto = "\n".join(cambios)
+                    prompt = f"""
+                    Eres el Analista Jefe y Estratega de mi War Room de Fantasy Football.
+                    Nuestro algoritmo de optimización detectó que debemos hacer estos cambios exactos en la alineación:
+                    
+                    {cambios_texto}
+                    
+                    Al hacer estos cambios, nuestra probabilidad matemática de ganar sube de {prob_base}% a {prob_sim}%.
+                    
+                    Redacta un REPORTE EJECUTIVO TÁCTICO profesional dirigido a mí (el Head Coach) explicando POR QUÉ debemos hacer este cambio.
+                    Usa este formato estricto:
+                    1. 🔍 **Análisis de la Sustitución:** ¿Por qué el jugador que sube de la banca nos da más ventaja que el titular que estamos sentando?
+                    2. 🧮 **Justificación Matemática:** Menciona el incremento en las probabilidades de victoria y por qué reducir la varianza importa.
+                    3. ⚖️ **Veredicto:** Tu recomendación definitiva.
+                    """
+                    
+                    with st.spinner("Redactando reporte ejecutivo de los cambios..."):
+                        reporte_ia = llamar_gemini(prompt)
+                        st.info(reporte_ia)
 
     st.divider()
 
