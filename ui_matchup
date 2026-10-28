@@ -1,0 +1,41 @@
+import streamlit as st
+import matplotlib.pyplot as plt
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from core_logic import (
+    ejecutar_monte_carlo_dual, optimizar_alineacion, llamar_gemini, 
+    calcular_drift_probabilidad, generar_comparativa_side_by_side, 
+    MI_EQUIPO_NOMBRE
+)
+
+COLOR_MIO = "#4A90E2"
+COLOR_RIV = "#E94B3C"
+
+def render_tab_live(datos, mi_roster, riv_start, riv_nom):
+    m_aseg = sum([datos['reales'][str(p)] for p in mi_roster['starters'] if str(p) in datos['reales']])
+    m_rest = sum([datos['proy'].get(str(p), 0.0) for p in mi_roster['starters'] if str(p) not in datos['reales']])
+    r_aseg = sum([datos['reales'][str(p)] for p in riv_start if str(p) in datos['reales']])
+    r_rest = sum([datos['proy'].get(str(p), 0.0) for p in riv_start if str(p) not in datos['reales']])
+    pts_mios, pts_riv = round(m_aseg + m_rest, 1), round(r_aseg + r_rest, 1)
+    
+    opt_start, cambios = optimizar_alineacion(mi_roster['starters'], [p for p in mi_roster['players'] if p not in mi_roster['starters']], datos['players_db'], datos['proy'], datos['reales'])
+    prob, med, sm, sr = ejecutar_monte_carlo_dual(opt_start, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
+
+    st.markdown(f"<h1 style='text-align: center; color: white; background-color: #111111; padding: 20px; border-radius: 10px; border: 2px solid {COLOR_MIO};'>🔥 GAMEDAY WARS: SEMANA {datos['semana']} 🔥</h1>", unsafe_allow_html=True)
+    st.write("")
+    
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c1:
+        st.markdown(f"<h3 style='text-align: center; color: {COLOR_MIO}; margin-bottom: 0px;'>{MI_EQUIPO_NOMBRE}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h1 style='text-align: center; font-size: 70px; margin-top: 0px;'>{pts_mios}</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align: center; color: gray;'>Asegurados: {round(m_aseg, 1)} pts</p>", unsafe_allow_html=True)
+        
+    with c2:
+        fig_gauge = go.Figure(go.Indicator(
+            mode = "gauge+number+delta", value = prob,
+            delta = {'reference': 50, 'position': "top", 'increasing': {'color': "green"}, 'decreasing': {'color': "red"}},
+            title = {'text': "⚡ PROBABILIDAD DE VICTORIA ⚡", 'font': {'size': 20, 'color': "gray"}},
+            gauge = {
+                'axis': {'range': [0, 100], 'tickwidth': 2, 'tickcolor': "white"},
+                'bar': {'color': COLOR_
