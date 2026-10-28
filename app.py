@@ -8,13 +8,16 @@ sns.set_theme(style="whitegrid", palette="pastel")
 
 from core_logic import extraer_datos_sleeper, SLEEPER_USERNAME, MI_EQUIPO_NOMBRE
 
+# Módulo 1
 from ui_matchup import (
     render_tab_live, render_tab_side_by_side, render_tab_tracker, 
     render_tab_pronosticos, render_tab_vegas_odds
 )
-# Importamos la nueva función consolidada
+
+# Módulo 2
 from ui_scouting import render_tab_scouting
 
+# Módulo Temporal (hasta que terminemos de migrar)
 from ui_tabs import (
     render_tab_forense, render_tab_waivers, render_tab_nflverse, 
     render_tab_heatmap, render_tab_oraculo, render_tab_trade_machine, 
@@ -42,7 +45,6 @@ if datos:
     riv_start = next((r.get('starters', []) for r in datos["rosters"] if r.get('roster_id') == riv_r_id), [])
     
     if mi_roster:
-        # Redujimos de 16 a 15 pestañas
         tabs = st.tabs([
             "⚔️ Resumen Live", "⚖️ Side-by-Side", "📋 Scouting Roster", 
             "📊 Tracker Liga", "🔮 Predicciones", "🕵‍♂️ Sabotaje", 
@@ -53,7 +55,7 @@ if datos:
 
         with tabs[0]: render_tab_live(datos, mi_roster, riv_start, riv_nom)
         with tabs[1]: render_tab_side_by_side(datos, mi_roster, riv_start, riv_nom, mi_r_id, u_map)
-        with tabs[2]: render_tab_scouting(datos, mi_roster, riv_start) # Pestaña fusionada
+        with tabs[2]: render_tab_scouting(datos, mi_roster, riv_start)
         with tabs[3]: render_tab_tracker(datos, u_map)
         with tabs[4]: render_tab_pronosticos(datos, u_map, mi_r_id)
         with tabs[5]: render_tab_forense(datos, u_map)
@@ -67,4 +69,4 @@ if datos:
         with tabs[13]: render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map)
         with tabs[14]: render_tab_noticias(datos, u_map)
 else:
-    st.error("Error conectando a la API.")
+    st.error("Error conectando a la API de Sleeper.")
