@@ -5,8 +5,11 @@ import plotly.express as px
 import math
 from core_logic import (
     get_proy, ejecutar_monte_carlo_dual, formatear_roster_df, 
-    cargar_nflverse, COLOR_MIO, COLOR_RIV
+    cargar_nflverse
 )
+
+COLOR_MIO = "#4A90E2"
+COLOR_RIV = "#E94B3C"
 
 def render_tab_scouting(datos, mi_roster, riv_start):
     st.header("📋 Auditoría de Roster & Histórico")
@@ -57,4 +60,49 @@ def render_tab_scouting(datos, mi_roster, riv_start):
         opciones_jugadores[nom] = pid
         
     titulares_actuales = [nom for nom, pid in opciones_jugadores.items() if pid in mi_roster['starters'] and str(pid) != "0"]
-    nuevos_titulares = st.multiselect("Arma tu alineación simulada:", options=list(opciones_jugadores.keys()), default=titulares
+    
+    # Esta es la línea que se cortó en tu archivo
+    nuevos_titulares = st.multiselect("Arma tu alineación simulada:", options=list(opciones_jugadores.keys()), default=titulares_actuales)
+
+    if st.button("▶️ Simular Impacto de Alineación"):
+        ids_simulados = [opciones_jugadores[nom] for nom in nuevos_titulares]
+        with st.spinner("Corriendo iteraciones..."):
+            prob_base, _, _, _ = ejecutar_monte_carlo_dual(mi_roster['starters'], riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
+            prob_sim, _, sm, sr = ejecutar_monte_carlo_dual(ids_simulados, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
+            delta = round(prob_sim - prob_base, 1)
+            
+            c_res1, c_res2, c_res3 = st.columns(3)
+            c_res1.metric("Probabilidad Original", f"{prob_base}%")
+            c_res2.metric("Probabilidad Simulada", f"{prob_sim}%")
+            c_res3.metric("Impacto del Cambio", f"{'+' if delta >= 0 else ''}{delta}%", delta=f"{delta}%", delta_color="normal")
+
+    st.divider()
+
+    # --- PARTE 3: DESEMPEÑO HISTÓRICO (NFLVerse) ---
+    st.header("📈 Desempeño Histórico (Mi Equipo)")
+    df_nfl = cargar_nflverse()
+    if not df_nfl.empty:
+        mis_jugadores = [f"{datos['players_db'].get(str(pid), {}).get('first_name', '')} {datos['players_db'].get(str(pid), {}).get('last_name', '')}".strip() for pid in mi_roster['players']]
+        col_name = 'player_display_name' if 'player_display_name' in df_nfl.columns else 'player_name'
+        df_mis = df_nfl[df_nfl[col_name].isin(mis_jugadores)].copy()
+        
+        if not df_mis.empty:
+            df_temporada = df_mis.groupby([col_name, 'season'])[['fantasy_points_ppr', 'passing_yards', 'rushing_yards', 'receiving_yards']].sum().reset_index()
+            jugadores_con_datos = df_temporada[col_name].unique()
+            cols = st.columns(2)
+            
+            for i, jugador in enumerate(jugadores_con_datos):
+                df_jugador = df_temporada[df_temporada[col_name] == jugador]
+                with cols[i % 2]:
+                    st.subheader(f"🏈 {jugador}")
+                    fig = px.bar(df_jugador, x="season", y="fantasy_points_ppr", text_auto=".1f", color_discrete_sequence=[COLOR_MIO])
+                    fig.update_xaxes(type='category', title="")
+                    fig.update_yaxes(title="Puntos PPR")
+                    fig.update_layout(title="Producción Histórica", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=40, b=0, l=0, r=0))
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    df_tabla = df_jugador.rename(columns={"season": "Temp", "fantasy_points_ppr": "Pts PPR", "passing_yards": "Yds Pase", "rushing_yards": "Yds Tierra", "receiving_yards": "Yds Aire"}).drop(columns=[col_name])
+                    st.dataframe(df_tabla, hide_index=True, use_container_width=True)
+                    st.divider()
+        else:
+            st.info("Sin datos históricos de NFLVerse para tus jugadores.")
