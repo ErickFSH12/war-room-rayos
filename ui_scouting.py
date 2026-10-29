@@ -63,14 +63,31 @@ def render_tab_scouting(datos, mi_roster, riv_start):
     with col_res:
         if auto_simular:
             with st.spinner("Mastermind calculando permutaciones de roster..."):
-                # 1. Encontrar la mejor alineación matemática
                 opt_start, cambios = optimizar_alineacion(mi_roster['starters'], banca_ids, datos['players_db'], datos['proy'], datos['reales'])
+                prob_base, _, _, _ = ejecutar_monte_carlo_dual(mi_roster['starters'], riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
                 
                 if not cambios:
-                    st.success("✅ **Sistemas Óptimos:** Tu alineación actual es la mejor configuración matemática posible. No toques tu app de Sleeper.")
+                    st.success("✅ **Sistemas Óptimos:** Tu alineación actual es la mejor configuración matemática posible.")
+                    st.metric("Probabilidad Consolidada", f"{prob_base}%")
+                    st.divider()
+                    
+                    titulares_nombres = ", ".join([datos['players_db'].get(str(pid), {}).get('last_name', '') for pid in mi_roster['starters'] if str(pid) != "0"])
+                    banca_nombres = ", ".join([datos['players_db'].get(str(pid), {}).get('last_name', '') for pid in banca_ids])
+                    
+                    prompt_optimo = f"""
+                    Eres el Analista Jefe de mi War Room de Fantasy. El motor Monte Carlo acaba de confirmar que mi alineación titular es la matemáticamente perfecta y no debo hacer cambios.
+                    Probabilidad de victoria: {prob_base}%.
+                    Mis titulares clave: {titulares_nombres}.
+                    Mi banca: {banca_nombres}.
+                    
+                    Redacta un REPORTE EJECUTIVO DE VALIDACIÓN (2 párrafos max):
+                    1. Felicítame por no caer en el pánico de meter suplentes.
+                    2. Explica tácticamente por qué es mejor mantener a los titulares actuales y dejar a la banca (menciona un par de nombres) en su lugar, reduciendo el riesgo de perder puntos.
+                    """
+                    with st.spinner("Redactando validación táctica..."):
+                        st.info(llamar_gemini(prompt_optimo))
+                        
                 else:
-                    # 2. Correr Monte Carlo para medir el impacto real
-                    prob_base, _, _, _ = ejecutar_monte_carlo_dual(mi_roster['starters'], riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
                     prob_sim, _, _, _ = ejecutar_monte_carlo_dual(opt_start, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
                     delta = round(prob_sim - prob_base, 1)
                     
@@ -87,20 +104,19 @@ def render_tab_scouting(datos, mi_roster, riv_start):
                         
                     st.divider()
                     
-                    # 3. Gemini redacta el Reporte Ejecutivo
                     cambios_texto = "\n".join(cambios)
                     prompt = f"""
                     Eres el Analista Jefe y Estratega de mi War Room de Fantasy Football.
-                    Nuestro algoritmo de optimización detectó que debemos hacer estos cambios exactos en la alineación:
+                    Nuestro algoritmo detectó que debemos hacer estos cambios exactos en la alineación:
                     
                     {cambios_texto}
                     
-                    Al hacer estos cambios, nuestra probabilidad matemática de ganar sube de {prob_base}% a {prob_sim}%.
+                    Probabilidad matemática de ganar sube de {prob_base}% a {prob_sim}%.
                     
-                    Redacta un REPORTE EJECUTIVO TÁCTICO profesional dirigido a mí (el Head Coach) explicando POR QUÉ debemos hacer este cambio.
+                    Redacta un REPORTE EJECUTIVO TÁCTICO profesional dirigido a mí explicando POR QUÉ debemos hacer este cambio.
                     Usa este formato estricto:
-                    1. 🔍 **Análisis de la Sustitución:** ¿Por qué el jugador que sube de la banca nos da más ventaja que el titular que estamos sentando?
-                    2. 🧮 **Justificación Matemática:** Menciona el incremento en las probabilidades de victoria y por qué reducir la varianza importa.
+                    1. 🔍 **Análisis de la Sustitución:** ¿Por qué el jugador de la banca da más ventaja que el titular?
+                    2. 🧮 **Justificación Matemática:** Menciona el incremento en las probabilidades.
                     3. ⚖️ **Veredicto:** Tu recomendación definitiva.
                     """
                     
