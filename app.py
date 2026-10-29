@@ -8,13 +8,16 @@ sns.set_theme(style="whitegrid", palette="pastel")
 
 from core_logic import extraer_datos_sleeper, SLEEPER_USERNAME, MI_EQUIPO_NOMBRE
 
+# --- MÓDULOS DE ARQUITECTURA LIMPIA ---
 from ui_matchup import render_tab_live, render_tab_side_by_side, render_tab_tracker_y_predicciones
 from ui_scouting import render_tab_scouting
 from ui_market import render_tab_market_dynamics
+from ui_ai import render_tab_mastermind, render_tab_noticias
 
-# Eliminamos la importación de 'render_tab_lesiones'
-from ui_tabs import render_tab_forense, render_tab_waivers, render_tab_nflverse, render_tab_oraculo, render_tab_trade_machine, render_tab_mastermind, render_tab_noticias
+# --- MÓDULO TEMPORAL (Restos que pronto moveremos a ui_market o ui_scouting) ---
+from ui_tabs import render_tab_forense, render_tab_waivers, render_tab_nflverse, render_tab_oraculo, render_tab_trade_machine
 
+# --- UI PRINCIPAL ---
 c_title, c_btn = st.columns([4, 1])
 with c_title: 
     st.title("⚡ WAR ROOM: Rayos de Jalisco")
@@ -37,7 +40,6 @@ if datos:
     riv_start = next((r.get('starters', []) for r in datos["rosters"] if r.get('roster_id') == riv_r_id), [])
     
     if mi_roster:
-        # Bajamos a 12 poderosas pestañas
         tabs = st.tabs([
             "⚔️ Resumen Live", "⚖️ Side-by-Side", "📋 Scouting Roster", 
             "📊 Tracker & Predicciones", "📈 Mercado & Odds", "🕵‍♂️ Sabotaje", 
@@ -56,7 +58,7 @@ if datos:
         with tabs[7]: render_tab_nflverse(datos)
         with tabs[8]: render_tab_oraculo(datos, u_map)
         with tabs[9]: render_tab_trade_machine(datos, mi_roster, u_map)
-        with tabs[10]: render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map) # La IA ahora tiene la vista médica
+        with tabs[10]: render_tab_mastermind(datos, mi_roster, riv_start, riv_nom, u_map)
         with tabs[11]: render_tab_noticias(datos, u_map)
 else:
     st.error("Error conectando a la API de Sleeper.")
