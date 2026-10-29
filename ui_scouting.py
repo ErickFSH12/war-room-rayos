@@ -50,79 +50,90 @@ def render_tab_scouting(datos, mi_roster, riv_start):
 
     st.divider()
 
-    # --- PARTE 2: MASTERMIND AUTO-OPTIMIZADOR ---
-    st.subheader("🧠 Piloto Automático Mastermind (Monte Carlo)")
-    st.write("Deja que la IA escanee tu banca y encuentre la alineación matemáticamente perfecta.")
+    # --- PARTE 2: MULTIVERSO MASTERMIND ---
+    st.subheader("🧠 Piloto Automático: Multiverso Táctico")
+    st.write("El sistema generará 3 alineaciones posibles, cruzará reportes de lesiones y matchups, y te dirá exactamente qué hacer.")
     
-    col_btn, col_res = st.columns([1, 2])
-    
-    with col_btn:
-        st.info("El algoritmo iterará sobre todas las combinaciones posibles de tu roster actual.")
-        auto_simular = st.button("🚀 Ejecutar Optimización Máxima", use_container_width=True)
+    if st.button("🚀 Simular Universos y Generar Reporte", use_container_width=True):
+        with st.spinner("Mastermind simulando 6,000 iteraciones (3 escenarios)..."):
+            
+            # ESCENARIO A: ACTUAL
+            L_A = mi_roster['starters']
+            
+            # ESCENARIO B: ÓPTIMO (Máximo EV)
+            L_B, cambios = optimizar_alineacion(mi_roster['starters'], banca_ids, datos['players_db'], datos['proy'], datos['reales'])
+            
+            # ESCENARIO C: TRAMPA DE TECHO (Reemplazar el peor titular FLEX por el mejor banca FLEX)
+            L_C = list(L_B)
+            flex_pos = ['RB', 'WR', 'TE']
+            banca_flex = [p for p in banca_ids if datos['players_db'].get(str(p), {}).get('position') in flex_pos]
+            banca_ord = sorted(banca_flex, key=lambda x: datos['proy'].get(str(x), 0.0), reverse=True)
+            
+            if banca_ord:
+                mejor_banca = banca_ord[0]
+                titulares_flex = [p for p in L_B if str(p) != "0" and datos['players_db'].get(str(p), {}).get('position') in flex_pos]
+                titulares_ord = sorted(titulares_flex, key=lambda x: datos['proy'].get(str(x), 0.0))
+                if titulares_ord:
+                    peor_titular = titulares_ord[0]
+                    L_C[L_C.index(peor_titular)] = mejor_banca
 
-    with col_res:
-        if auto_simular:
-            with st.spinner("Mastermind calculando permutaciones de roster..."):
-                opt_start, cambios = optimizar_alineacion(mi_roster['starters'], banca_ids, datos['players_db'], datos['proy'], datos['reales'])
-                prob_base, _, _, _ = ejecutar_monte_carlo_dual(mi_roster['starters'], riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
-                
-                if not cambios:
-                    st.success("✅ **Sistemas Óptimos:** Tu alineación actual es la mejor configuración matemática posible.")
-                    st.metric("Probabilidad Consolidada", f"{prob_base}%")
-                    st.divider()
-                    
-                    titulares_nombres = ", ".join([datos['players_db'].get(str(pid), {}).get('last_name', '') for pid in mi_roster['starters'] if str(pid) != "0"])
-                    banca_nombres = ", ".join([datos['players_db'].get(str(pid), {}).get('last_name', '') for pid in banca_ids])
-                    
-                    prompt_optimo = f"""
-                    Eres el Analista Jefe de mi War Room de Fantasy. El motor Monte Carlo acaba de confirmar que mi alineación titular es la matemáticamente perfecta y no debo hacer cambios.
-                    Probabilidad de victoria: {prob_base}%.
-                    Mis titulares clave: {titulares_nombres}.
-                    Mi banca: {banca_nombres}.
-                    
-                    Redacta un REPORTE EJECUTIVO DE VALIDACIÓN (2 párrafos max):
-                    1. Felicítame por no caer en el pánico de meter suplentes.
-                    2. Explica tácticamente por qué es mejor mantener a los titulares actuales y dejar a la banca (menciona un par de nombres) en su lugar, reduciendo el riesgo de perder puntos.
-                    """
-                    with st.spinner("Redactando validación táctica..."):
-                        st.info(llamar_gemini(prompt_optimo))
-                        
-                else:
-                    prob_sim, _, _, _ = ejecutar_monte_carlo_dual(opt_start, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
-                    delta = round(prob_sim - prob_base, 1)
-                    
-                    st.error("🚨 **Se encontraron fugas de probabilidad en tu alineación inicial.**")
-                    
-                    c_m1, c_m2, c_m3 = st.columns(3)
-                    c_m1.metric("Prob. Original", f"{prob_base}%")
-                    c_m2.metric("Prob. Optimizada", f"{prob_sim}%")
-                    c_m3.metric("Impacto Matemático", f"{'+' if delta >= 0 else ''}{delta}%", delta=f"{delta}%")
-                    
-                    st.markdown("**👇 Rotaciones Detectadas:**")
-                    for c in cambios:
-                        st.write(f"- {c}")
-                        
-                    st.divider()
-                    
-                    cambios_texto = "\n".join(cambios)
-                    prompt = f"""
-                    Eres el Analista Jefe y Estratega de mi War Room de Fantasy Football.
-                    Nuestro algoritmo detectó que debemos hacer estos cambios exactos en la alineación:
-                    
-                    {cambios_texto}
-                    
-                    Probabilidad matemática de ganar sube de {prob_base}% a {prob_sim}%.
-                    
-                    Redacta un REPORTE EJECUTIVO TÁCTICO profesional dirigido a mí explicando POR QUÉ debemos hacer este cambio.
-                    Usa este formato estricto:
-                    1. 🔍 **Análisis de la Sustitución:** ¿Por qué el jugador de la banca da más ventaja que el titular?
-                    2. 🧮 **Justificación Matemática:** Menciona el incremento en las probabilidades.
-                    3. ⚖️ **Veredicto:** Tu recomendación definitiva.
-                    """
-                    
-                    with st.spinner("Redactando reporte ejecutivo de los cambios..."):
-                        reporte_ia = llamar_gemini(prompt)
-                        st.info(reporte_ia)
+            # CALCULAR PROBABILIDADES
+            prob_A, _, _, _ = ejecutar_monte_carlo_dual(L_A, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
+            prob_B, _, _, _ = ejecutar_monte_carlo_dual(L_B, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
+            prob_C, _, _, _ = ejecutar_monte_carlo_dual(L_C, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
+
+            # RENDERIZAR CUADRO COMPARATIVO
+            st.markdown("### 📊 Cuadro Comparativo de Probabilidades")
+            c1, c2, c3 = st.columns(3)
+            
+            def renderizar_lista(alineacion):
+                return "<br>".join([f"• {datos['players_db'].get(str(p),{}).get('last_name','')}" for p in alineacion if str(p) != "0"])
+
+            c1.info(f"<h4 style='text-align: center;'>Escenario A<br>(Tu Actual)</h4><h1 style='text-align: center;'>{prob_A}%</h1><div style='font-size: 12px;'>{renderizar_lista(L_A)}</div>", unsafe_allow_html=True)
+            c2.success(f"<h4 style='text-align: center;'>Escenario B<br>(Óptimo IA)</h4><h1 style='text-align: center;'>{prob_B}%</h1><div style='font-size: 12px;'>{renderizar_lista(L_B)}</div>", unsafe_allow_html=True)
+            c3.warning(f"<h4 style='text-align: center;'>Escenario C<br>(Alternativo)</h4><h1 style='text-align: center;'>{prob_C}%</h1><div style='font-size: 12px;'>{renderizar_lista(L_C)}</div>", unsafe_allow_html=True)
+
+            st.divider()
+
+            # EXTRAER CONTEXTO (LESIONES Y EQUIPOS) PARA GEMINI
+            ids_unicos = set(L_A + L_B + L_C)
+            info_jugadores = []
+            for pid in ids_unicos:
+                if str(pid) != "0":
+                    p = datos['players_db'].get(str(pid), {})
+                    nom = f"{p.get('first_name','')} {p.get('last_name','')}".strip()
+                    eq = p.get('team', 'FA')
+                    inj = p.get('injury_status', 'Sano')
+                    if not inj: inj = 'Sano'
+                    proy = round(datos['proy'].get(str(pid), 0.0), 1)
+                    info_jugadores.append(f"- {nom} (Eq: {eq}) | Proy: {proy} | Salud: {inj}")
+            contexto_medico = "\n".join(info_jugadores)
+
+            def nombrar_crudo(alineacion):
+                return ", ".join([datos['players_db'].get(str(p),{}).get('last_name','') for p in alineacion if str(p) != "0"])
+
+            prompt = f"""
+            Eres el Analista Jefe y Director Médico de mi War Room de Fantasy.
+            He simulado 3 alineaciones distintas mediante Monte Carlo (2000 iteraciones c/u):
+            
+            - ESCENARIO A (Mi alineación actual): Probabilidad {prob_A}%. (Jugadores: {nombrar_crudo(L_A)})
+            - ESCENARIO B (Óptimo Matemático): Probabilidad {prob_B}%. (Jugadores: {nombrar_crudo(L_B)})
+            - ESCENARIO C (Alternativa de riesgo): Probabilidad {prob_C}%. (Jugadores: {nombrar_crudo(L_C)})
+            
+            CONTEXTO DE JUGADORES (Salud y Equipos para matchups):
+            {contexto_medico}
+            
+            Redacta un REPORTE EJECUTIVO TÁCTICO Y MÉDICO dirigido al Head Coach.
+            Estructura requerida:
+            1. 📉 **¿Por qué las otras opciones fallan?:** Destroza los Escenarios con menor probabilidad. Menciona específicamente las lesiones ('Salud') y los enfrentamientos de la vida real de los equipos ('Eq') que los hacen una trampa.
+            2. 🏆 **El Camino a la Victoria:** Defiende por qué el Escenario ganador es el mejor. Justifica con la probabilidad de victoria y el contexto médico de sus jugadores.
+            3. ⚔️ **Veredicto Final:** La instrucción exacta de a quién iniciar y a quién sentar en Sleeper.
+            """
+
+            with st.spinner("Cruzando reportes médicos, defensas rivales y probabilidad matemática..."):
+                reporte_ia = llamar_gemini(prompt)
+                st.markdown("### 📝 Diagnóstico de IA: Lesiones & Matchups")
+                st.info(reporte_ia)
 
     st.divider()
 
