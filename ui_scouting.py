@@ -82,16 +82,20 @@ def render_tab_scouting(datos, mi_roster, riv_start):
             prob_B, _, _, _ = ejecutar_monte_carlo_dual(L_B, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
             prob_C, _, _, _ = ejecutar_monte_carlo_dual(L_C, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
 
-            # RENDERIZAR CUADRO COMPARATIVO
+            # RENDERIZAR CUADRO COMPARATIVO CON MARKDOWN
             st.markdown("### 📊 Cuadro Comparativo de Probabilidades")
             c1, c2, c3 = st.columns(3)
             
             def renderizar_lista(alineacion):
                 return "<br>".join([f"• {datos['players_db'].get(str(p),{}).get('last_name','')}" for p in alineacion if str(p) != "0"])
 
-            c1.info(f"<h4 style='text-align: center;'>Escenario A<br>(Tu Actual)</h4><h1 style='text-align: center;'>{prob_A}%</h1><div style='font-size: 12px;'>{renderizar_lista(L_A)}</div>", unsafe_allow_html=True)
-            c2.success(f"<h4 style='text-align: center;'>Escenario B<br>(Óptimo IA)</h4><h1 style='text-align: center;'>{prob_B}%</h1><div style='font-size: 12px;'>{renderizar_lista(L_B)}</div>", unsafe_allow_html=True)
-            c3.warning(f"<h4 style='text-align: center;'>Escenario C<br>(Alternativo)</h4><h1 style='text-align: center;'>{prob_C}%</h1><div style='font-size: 12px;'>{renderizar_lista(L_C)}</div>", unsafe_allow_html=True)
+            html_A = f"<div style='background-color:#1e3d59; padding:15px; border-radius:10px; border:2px solid {COLOR_MIO};'><h4 style='text-align: center; color:white;'>Escenario A<br>(Tu Actual)</h4><h1 style='text-align: center; color:white;'>{prob_A}%</h1><div style='font-size: 13px; color:#e0e0e0;'>{renderizar_lista(L_A)}</div></div>"
+            html_B = f"<div style='background-color:#2a4d3e; padding:15px; border-radius:10px; border:2px solid #4CAF50;'><h4 style='text-align: center; color:white;'>Escenario B<br>(Óptimo IA)</h4><h1 style='text-align: center; color:white;'>{prob_B}%</h1><div style='font-size: 13px; color:#e0e0e0;'>{renderizar_lista(L_B)}</div></div>"
+            html_C = f"<div style='background-color:#593d1e; padding:15px; border-radius:10px; border:2px solid #FF9800;'><h4 style='text-align: center; color:white;'>Escenario C<br>(Alternativo)</h4><h1 style='text-align: center; color:white;'>{prob_C}%</h1><div style='font-size: 13px; color:#e0e0e0;'>{renderizar_lista(L_C)}</div></div>"
+
+            c1.markdown(html_A, unsafe_allow_html=True)
+            c2.markdown(html_B, unsafe_allow_html=True)
+            c3.markdown(html_C, unsafe_allow_html=True)
 
             st.divider()
 
