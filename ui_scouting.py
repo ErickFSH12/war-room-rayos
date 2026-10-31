@@ -57,13 +57,9 @@ def render_tab_scouting(datos, mi_roster, riv_start):
     if st.button("🚀 Simular Universos y Generar Reporte", use_container_width=True):
         with st.spinner("Mastermind simulando 6,000 iteraciones (3 escenarios)..."):
             
-            # ESCENARIO A: ACTUAL
             L_A = mi_roster['starters']
-            
-            # ESCENARIO B: ÓPTIMO (Máximo EV)
             L_B, cambios = optimizar_alineacion(mi_roster['starters'], banca_ids, datos['players_db'], datos['proy'], datos['reales'])
             
-            # ESCENARIO C: TRAMPA DE TECHO (Reemplazar el peor titular FLEX por el mejor banca FLEX)
             L_C = list(L_B)
             flex_pos = ['RB', 'WR', 'TE']
             banca_flex = [p for p in banca_ids if datos['players_db'].get(str(p), {}).get('position') in flex_pos]
@@ -77,12 +73,10 @@ def render_tab_scouting(datos, mi_roster, riv_start):
                     peor_titular = titulares_ord[0]
                     L_C[L_C.index(peor_titular)] = mejor_banca
 
-            # CALCULAR PROBABILIDADES
             prob_A, _, _, _ = ejecutar_monte_carlo_dual(L_A, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
             prob_B, _, _, _ = ejecutar_monte_carlo_dual(L_B, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
             prob_C, _, _, _ = ejecutar_monte_carlo_dual(L_C, riv_start, datos['players_db'], datos['proy'], datos['reales'], 2000)
 
-            # RENDERIZAR CUADRO COMPARATIVO CON MARKDOWN
             st.markdown("### 📊 Cuadro Comparativo de Probabilidades")
             c1, c2, c3 = st.columns(3)
             
@@ -99,7 +93,6 @@ def render_tab_scouting(datos, mi_roster, riv_start):
 
             st.divider()
 
-            # EXTRAER CONTEXTO (LESIONES Y EQUIPOS) PARA GEMINI
             ids_unicos = set(L_A + L_B + L_C)
             info_jugadores = []
             for pid in ids_unicos:
@@ -118,7 +111,7 @@ def render_tab_scouting(datos, mi_roster, riv_start):
 
             prompt = f"""
             Eres el Analista Jefe y Director Médico de mi War Room de Fantasy.
-            He simulado 3 alineaciones distintas mediante Monte Carlo (2000 iteraciones c/u):
+            He simulado 3 alineaciones distintas mediante Monte Carlo:
             
             - ESCENARIO A (Mi alineación actual): Probabilidad {prob_A}%. (Jugadores: {nombrar_crudo(L_A)})
             - ESCENARIO B (Óptimo Matemático): Probabilidad {prob_B}%. (Jugadores: {nombrar_crudo(L_B)})
@@ -127,11 +120,10 @@ def render_tab_scouting(datos, mi_roster, riv_start):
             CONTEXTO DE JUGADORES (Salud y Equipos para matchups):
             {contexto_medico}
             
-            Redacta un REPORTE EJECUTIVO TÁCTICO Y MÉDICO dirigido al Head Coach.
-            Estructura requerida:
-            1. 📉 **¿Por qué las otras opciones fallan?:** Destroza los Escenarios con menor probabilidad. Menciona específicamente las lesiones ('Salud') y los enfrentamientos de la vida real de los equipos ('Eq') que los hacen una trampa.
-            2. 🏆 **El Camino a la Victoria:** Defiende por qué el Escenario ganador es el mejor. Justifica con la probabilidad de victoria y el contexto médico de sus jugadores.
-            3. ⚔️ **Veredicto Final:** La instrucción exacta de a quién iniciar y a quién sentar en Sleeper.
+            Redacta un REPORTE EJECUTIVO TÁCTICO Y MÉDICO. Estructura requerida:
+            1. 📉 **¿Por qué las otras opciones fallan?:** Destroza los Escenarios con menor probabilidad basándote en las lesiones y los enfrentamientos.
+            2. 🏆 **El Camino a la Victoria:** Defiende el Escenario ganador.
+            3. ⚔️ **Veredicto Final:** Instrucción de a quién iniciar y sentar.
             """
 
             with st.spinner("Cruzando reportes médicos, defensas rivales y probabilidad matemática..."):
@@ -141,7 +133,58 @@ def render_tab_scouting(datos, mi_roster, riv_start):
 
     st.divider()
 
-    # --- PARTE 3: DESEMPEÑO HISTÓRICO (NFLVerse) ---
+    # --- PARTE 4: SCOUTING INDIVIDUAL & EXPEDIENTE MÉDICO ---
+    st.header("🔬 Scouting Individual & Expediente Clínico")
+    st.write("Selecciona cualquier jugador de tu roster para evaluar a su rival de la semana y recibir un pronóstico médico profundo.")
+    
+    opciones_scouting = {}
+    for pid in mi_roster['players']:
+        p = datos['players_db'].get(str(pid), {})
+        nom = f"{p.get('first_name', '')} {p.get('last_name', '')}".strip()
+        pos = p.get('position', 'FLEX')
+        if nom:
+            opciones_scouting[f"{nom} ({pos})"] = pid
+            
+    c_sel, c_btn2 = st.columns([2, 1])
+    with c_sel:
+        jugador_seleccionado = st.selectbox("Elige un jugador para auditoría:", list(opciones_scouting.keys()))
+    with c_btn2:
+        st.write("") # Espaciador
+        st.write("")
+        btn_expediente = st.button("🔍 Generar Expediente IA", use_container_width=True)
+
+    if btn_expediente:
+        pid_sel = opciones_scouting[jugador_seleccionado]
+        p_data = datos['players_db'].get(str(pid_sel), {})
+        nom_jug = f"{p_data.get('first_name', '')} {p_data.get('last_name', '')}".strip()
+        eq_jug = p_data.get('team', 'FA')
+        inj_status = p_data.get('injury_status', 'Sano')
+        if not inj_status: inj_status = 'Sano'
+        semana_actual = datos.get('semana', 'actual')
+
+        prompt_scouting = f"""
+        Eres el Director de Inteligencia Deportiva y Médico Especialista de nuestro War Room de Fantasy Football.
+        Analiza al siguiente jugador para la Semana {semana_actual} de la NFL:
+        
+        - Jugador: {nom_jug}
+        - Posición: {p_data.get('position', 'Desconocida')}
+        - Equipo NFL: {eq_jug}
+        - Estatus Médico Oficial: {inj_status}
+        
+        Genera un EXPEDIENTE CLÍNICO Y TÁCTICO con esta estructura:
+        1. 🛡️ **Enfrentamiento de la Semana:** Identifica al rival de la vida real de {eq_jug} para esta semana. Analiza si esa defensa rival es dura o permisiva contra su posición.
+        2. 🚑 **Reporte Médico & Estadística de Recuperación:** Analiza su estatus '{inj_status}'. Si está lesionado o es propenso a lesiones, detalla el tiempo promedio histórico en la NFL para recuperarse de su tipo de lesión más reciente y el riesgo real de recaída/baja de puntos. Si está sano, destaca su durabilidad.
+        3. 🎯 **Veredicto Táctico:** ¿Lo alineamos con confianza, buscamos plan B, o lo vendemos en un Trade?
+        """
+        
+        with st.spinner(f"Analizando historiales médicos y métricas defensivas para {nom_jug}..."):
+            reporte_scouting = llamar_gemini(prompt_scouting)
+            st.success(f"**Expediente Generado: {nom_jug}**")
+            st.write(reporte_scouting)
+
+    st.divider()
+
+    # --- PARTE 5: DESEMPEÑO HISTÓRICO (NFLVerse) ---
     st.header("📈 Desempeño Histórico (Mi Equipo)")
     df_nfl = cargar_nflverse()
     if not df_nfl.empty:
